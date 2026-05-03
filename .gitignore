@@ -1,0 +1,12 @@
+.venv/
+.codex/
+.claude/settings.local.json
+__pycache__/
+*.pyc
+.DS_Store
+*.swp
+*.egg-info/
+dist/
+build/
+.env
+.claude

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "guardians-of-the-token"
+version = "1.0.0"
+description = "Guards LLM agents from accidental large-context file reads, web fetches, and tool output."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "Guardians of the Token contributors" }
+]
+dependencies = [
+  "fastapi",
+  "httpx",
+  "pydantic",
+  "uvicorn",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+]
+
+[project.scripts]
+guardians-install = "guardians_of_the_token.cli:install_auto"
+guardians-claude-install = "guardians_of_the_token.cli:install_claude"
+guardians-codex-install = "guardians_of_the_token.cli:install_codex"
+guardians-project-init = "guardians_of_the_token.cli:init_project"
+guardians-codex-pre-tool = "guardians_of_the_token.codex.pre_tool_guard:main"
+guardians-codex-post-tool = "guardians_of_the_token.codex.post_tool_guard:main"
+guardians-test-server = "guardians_of_the_token.test_server:main"
+guardians-mcp = "guardians_of_the_token.mcp_server:main"
+guardians-proxy = "guardians_of_the_token.proxy:main"
+
+[tool.setuptools.packages.find]
+include = ["guardians_of_the_token*"]

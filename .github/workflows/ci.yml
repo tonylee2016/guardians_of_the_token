@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-package:
+    name: Test package on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package
+        run: python -m pip install '.[test]'
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Smoke test console scripts
+        run: |
+          guardians-codex-install --help
+          guardians-claude-install --help
+          guardians-codex-pre-tool < /dev/null
+          guardians-codex-post-tool < /dev/null
+
+      - name: Smoke test MCP server
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' \
+            | guardians-mcp \
+            | grep '"serverInfo"'

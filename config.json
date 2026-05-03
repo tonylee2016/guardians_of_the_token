@@ -1,0 +1,49 @@
+{
+  "name": "Guardians of the Token",
+  "version": "1.0.0",
+  "clients": {
+    "claude_desktop": {
+      "transport": "mcp_stdio",
+      "config_file": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "config": {
+        "mcpServers": {
+          "guardiansOfTheToken": {
+            "command": "guardians-mcp",
+            "args": []
+          }
+        }
+      }
+    },
+    "claude_code_cli": {
+      "transport": "mcp_stdio",
+      "setup": "Run: claude mcp add guardiansOfTheToken -- guardians-mcp"
+    },
+    "codex_cli": {
+      "transport": "mcp_stdio",
+      "config_file": "~/.codex/config.json",
+      "config": {
+        "mcpServers": {
+          "guardiansOfTheToken": {
+            "command": "guardians-mcp",
+            "args": []
+          }
+        }
+      }
+    },
+    "chatgpt_desktop": {
+      "transport": "mcp_stdio",
+      "note": "Add via ChatGPT Desktop → Settings → MCP Servers",
+      "config": {
+        "command": "guardians-mcp",
+        "args": []
+      }
+    },
+    "mobile_and_api": {
+      "transport": "http_proxy",
+      "note": "Consumer mobile apps (Claude/ChatGPT iOS/Android) do not support MCP. Use the HTTP proxy when calling the API directly.",
+      "start": "guardians-proxy",
+      "anthropic_base_url": "http://localhost:8080/anthropic",
+      "openai_base_url": "http://localhost:8080/openai"
+    }
+  }
+}
