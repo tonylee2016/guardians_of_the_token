@@ -51,12 +51,20 @@ The goal is simple: prevent accidental context damage while keeping the agent mo
 
 ## Install
 
-Primary install path:
+Install the PyPI package:
 
 ```bash
 python3 -m pip install guardians-of-the-token
+```
+
+Then run the installer:
+
+```bash
 guardians-install
 ```
+
+The package name is `guardians-of-the-token`. The Python import package is
+`guardians_of_the_token`.
 
 `guardians-install` shows a terminal banner, detects supported local clients,
 and presents a checkbox selector for individual integrations:
@@ -69,6 +77,14 @@ and presents a checkbox selector for individual integrations:
 Use Up/Down to move, Space to toggle, and Enter to install the selected
 integrations. Use `guardians-install --yes` to install into all detected
 integrations without prompting.
+
+If your Python environment blocks global installs, use a virtual environment or
+`pipx`:
+
+```bash
+pipx install guardians-of-the-token
+guardians-install
+```
 
 From a checkout during development:
 
