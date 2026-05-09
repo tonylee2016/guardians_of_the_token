@@ -70,7 +70,7 @@ CLAUDE_HOOKS_JSON = {
 
 
 CONFIG_TOML = """[features]
-codex_hooks = true
+hooks = true
 """
 
 CODEX_MCP_TOML = """[mcp_servers.guardians]
@@ -177,8 +177,9 @@ def workspace_parser(
 
 
 def enable_codex_hooks_config(existing: str) -> str:
-    if "codex_hooks" in existing:
-        return ensure_codex_mcp_server(existing)
+    migrated = migrate_codex_hooks_feature(existing)
+    if has_feature_line(migrated, "hooks"):
+        return ensure_codex_mcp_server(migrated)
     if "[features]" not in existing:
         separator = "" if not existing or existing.endswith("\n") else "\n"
         return ensure_codex_mcp_server(f"{existing}{separator}{CONFIG_TOML}")
@@ -186,11 +187,37 @@ def enable_codex_hooks_config(existing: str) -> str:
     lines = existing.splitlines()
     for index, line in enumerate(lines):
         if line.strip() == "[features]":
-            lines.insert(index + 1, "codex_hooks = true")
+            lines.insert(index + 1, "hooks = true")
             break
     result = "\n".join(lines)
     result = result + ("\n" if existing.endswith("\n") else "")
     return ensure_codex_mcp_server(result)
+
+
+def has_feature_line(config: str, feature: str) -> bool:
+    prefix = f"{feature} "
+    return any(line.strip().startswith(prefix) for line in config.splitlines())
+
+
+def migrate_codex_hooks_feature(existing: str) -> str:
+    lines = []
+    saw_hooks_feature = has_feature_line(existing, "hooks")
+    replaced_codex_hooks = False
+    for line in existing.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("codex_hooks "):
+            if not saw_hooks_feature:
+                lines.append(line.replace("codex_hooks", "hooks", 1))
+                saw_hooks_feature = True
+            replaced_codex_hooks = True
+            continue
+        lines.append(line)
+    result = "\n".join(lines)
+    if existing.endswith("\n"):
+        result += "\n"
+    if replaced_codex_hooks:
+        return result
+    return existing
 
 
 def ensure_codex_mcp_server(existing: str) -> str:
@@ -232,11 +259,13 @@ def install_codex():
 
     if config_path.exists() and not args.force:
         existing = config_path.read_text()
-        if "codex_hooks" not in existing:
+        updated = enable_codex_hooks_config(existing)
+        if not has_feature_line(updated, "hooks"):
             raise SystemExit(
-                f"{config_path} already exists and does not mention codex_hooks. "
+                f"{config_path} already exists and does not mention hooks. "
                 "Enable codex hooks manually or re-run with --force."
             )
+        config_path.write_text(updated)
     else:
         config_path.write_text(CONFIG_TOML)
 

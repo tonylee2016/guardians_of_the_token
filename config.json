@@ -1,6 +1,6 @@
 {
   "name": "Guardians of the Token",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "clients": {
     "claude_desktop": {
       "transport": "mcp_stdio",

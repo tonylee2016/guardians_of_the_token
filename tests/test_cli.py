@@ -80,7 +80,7 @@ def test_enable_codex_hooks_config_adds_feature_to_existing_features_table():
 
     assert updated == (
         "[features]\n"
-        "codex_hooks = true\n"
+        "hooks = true\n"
         "other = true\n"
         "[projects]\n"
         "[mcp_servers.guardians]\n"
@@ -89,11 +89,30 @@ def test_enable_codex_hooks_config_adds_feature_to_existing_features_table():
 
 
 def test_enable_codex_hooks_config_adds_mcp_server_only_once():
-    existing = "[features]\ncodex_hooks = true\n\n[mcp_servers.guardians]\ncommand = \"guardians-mcp\"\n"
+    existing = "[features]\nhooks = true\n\n[mcp_servers.guardians]\ncommand = \"guardians-mcp\"\n"
 
     updated = enable_codex_hooks_config(existing)
 
     assert updated == existing
+
+
+def test_enable_codex_hooks_config_migrates_deprecated_feature():
+    existing = "[features]\ncodex_hooks = true\nother = true\n"
+
+    updated = enable_codex_hooks_config(existing)
+
+    assert "hooks = true" in updated
+    assert "codex_hooks" not in updated
+    assert "[mcp_servers.guardians]" in updated
+
+
+def test_enable_codex_hooks_config_drops_deprecated_feature_when_hooks_exists():
+    existing = "[features]\nhooks = true\ncodex_hooks = true\n"
+
+    updated = enable_codex_hooks_config(existing)
+
+    assert updated.count("hooks = true") == 1
+    assert "codex_hooks" not in updated
 
 
 def test_install_codex_global_merges_hooks_and_enables_config(tmp_path, monkeypatch):
@@ -139,7 +158,8 @@ def test_install_codex_global_merges_hooks_and_enables_config(tmp_path, monkeypa
     assert hooks["hooks"]["PreToolUse"][1]["hooks"][0]["command"] == (
         "python3 -m user_hook"
     )
-    assert "codex_hooks = true" in config_path.read_text()
+    assert "hooks = true" in config_path.read_text()
+    assert "codex_hooks" not in config_path.read_text()
     assert "[mcp_servers.guardians]" in config_path.read_text()
     assert 'command = "guardians-mcp"' in config_path.read_text()
     assert fixture_marker.read_text() == "fixtures refreshed"
@@ -160,7 +180,7 @@ def test_install_codex_global_creates_mcp_config_when_missing(tmp_path, monkeypa
     install_codex()
 
     config_text = (codex_dir / "config.toml").read_text()
-    assert "codex_hooks = true" in config_text
+    assert "hooks = true" in config_text
     assert CODEX_MCP_TOML in config_text
 
 
