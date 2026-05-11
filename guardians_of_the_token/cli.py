@@ -345,7 +345,10 @@ def install_claude():
 
 CCSTATUSLINE_CONFIG = Path("~/.config/ccstatusline/settings.json").expanduser()
 GUARDIANS_STATUS_COMMAND = "python3 -m guardians_of_the_token.status"
-GUARDIANS_WIDGET_ID = "guardians"
+
+
+def claude_settings_path() -> Path:
+    return Path("~/.claude/settings.json").expanduser()
 
 
 def _ccstatusline_has_guardians(config: dict) -> bool:
@@ -377,21 +380,22 @@ def install_statusline() -> str:
             CCSTATUSLINE_CONFIG.write_text(json.dumps(_ccstatusline_add_guardians(config), indent=2) + "\n")
         return "ccstatusline"
 
-    settings_path = Path("~/.claude/settings.json").expanduser()
+    settings_path = claude_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    if "statusLine" not in existing:
-        existing["statusLine"] = {
-            "type": "command",
-            "command": GUARDIANS_STATUS_COMMAND,
-            "refreshInterval": 10,
-        }
-        settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    if "statusLine" in existing:
+        return "standalone-exists"
+    existing["statusLine"] = {
+        "type": "command",
+        "command": GUARDIANS_STATUS_COMMAND,
+        "refreshInterval": 10,
+    }
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
     return "standalone"
 
 
 def install_claude_global() -> Path:
-    settings_path = Path("~/.claude/settings.json").expanduser()
+    settings_path = claude_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     merged_hooks = merge_hooks(existing.get("hooks", {}), CLAUDE_HOOKS_JSON["hooks"])
@@ -665,8 +669,10 @@ def install_statusline_cmd():
     mode = install_statusline()
     if mode == "ccstatusline":
         print(f"Added Guardians widget to ccstatusline ({CCSTATUSLINE_CONFIG})")
-    else:
+    elif mode == "standalone":
         print("Set Guardians standalone statusLine in ~/.claude/settings.json")
+    else:
+        print("statusLine already configured in ~/.claude/settings.json — skipped")
 
 
 def status():

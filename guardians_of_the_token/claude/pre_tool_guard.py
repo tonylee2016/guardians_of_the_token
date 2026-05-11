@@ -176,7 +176,7 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = 
             "risk": estimate["risk"],
         },
         config=config,
-        base_dir=cwd or file_path,
+        base_dir=cwd,
     )
     sys.exit(2)
 

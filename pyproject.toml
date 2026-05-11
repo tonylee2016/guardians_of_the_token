@@ -40,3 +40,6 @@ guardians-dashboard = "guardians_of_the_token.dashboard:main"
 
 [tool.setuptools.packages.find]
 include = ["guardians_of_the_token*"]
+
+[tool.setuptools.package-data]
+guardians_of_the_token = ["*.html"]

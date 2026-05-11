@@ -55,7 +55,7 @@ def main():
     if project is None:
         project = _cwd_from_stdin()
 
-    print(status_line(project), end="")
+    print(status_line(project))
 
 
 if __name__ == "__main__":
