@@ -20,11 +20,12 @@ import json
 import os
 import sys
 
+from guardians_of_the_token.config import estimate_cost, load_config, policy_decision
+from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import format_context_block
 
 BYPASS_FILE = "/tmp/guardians_bypass"
-CONFIG_FILE = os.path.expanduser("~/.guardians.json")
 CAP_MODULE = "guardians_of_the_token.claude.cap_output"
 
 DEFAULT_WARN_PCT = 20
@@ -46,14 +47,6 @@ MODEL_CONTEXT_WINDOWS = {
 
 # How many bytes to read from the end of the transcript to find model/usage
 TRANSCRIPT_TAIL = 32_000
-
-
-def load_config() -> dict:
-    try:
-        with open(CONFIG_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
 
 
 def read_tail(path: str, n: int) -> str:
@@ -124,14 +117,18 @@ def modify(tool_input: dict):
     sys.exit(0)
 
 
-def guard_read(tool_input: dict, transcript_path: str, config: dict):
+def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = ""):
     file_path = tool_input.get("file_path", "")
     try:
         os.path.getsize(file_path)
     except OSError:
         return
+    file_config = load_config(file_path)
+    decision = policy_decision(file_path, file_config)
+    if decision in {"whitelisted", "ignored"}:
+        return
 
-    warn_pct = config.get("warn_threshold_pct", DEFAULT_WARN_PCT)
+    warn_pct = file_config.get("warn_threshold_pct", DEFAULT_WARN_PCT)
     model, used_tokens = detect_model_and_usage(transcript_path)
     context_window = model_to_context_window(model)
     model_label = model if model else "unknown model"
@@ -151,6 +148,7 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict):
     used_pct = (used_tokens / context_window) * 100
     after_pct = ((used_tokens + file_tokens) / context_window) * 100
     will_compact = after_pct >= COMPACT_PCT
+    cost = estimate_cost(file_tokens, file_config, model_label)
 
     print(
         format_context_block(
@@ -162,9 +160,23 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict):
             kind="file",
             action="read",
             blocked_item="request",
+            estimated_cost=cost,
             critical=will_compact,
         ),
         file=sys.stderr,
+    )
+    log_event(
+        {
+            "client": "claude",
+            "kind": "file",
+            "target": file_path,
+            "action": "blocked",
+            "estimated_tokens": file_tokens,
+            "estimated_cost": cost,
+            "risk": estimate["risk"],
+        },
+        config=config,
+        base_dir=cwd or file_path,
     )
     sys.exit(2)
 
@@ -199,6 +211,7 @@ def guard_webfetch(tool_input: dict, transcript_path: str, config: dict):
     will_compact = after_pct >= COMPACT_PCT
     content_length = head["content_length"]
     size_kb = content_length // 1024 if content_length is not None else None
+    cost = estimate_cost(estimated_tokens, config, model_label)
 
     print(
         format_context_block(
@@ -211,9 +224,22 @@ def guard_webfetch(tool_input: dict, transcript_path: str, config: dict):
             action="fetch",
             blocked_item="request",
             size_kb=None if will_compact else size_kb,
+            estimated_cost=cost,
             critical=will_compact,
         ),
         file=sys.stderr,
+    )
+    log_event(
+        {
+            "client": "claude",
+            "kind": "url",
+            "target": url,
+            "action": "blocked",
+            "estimated_tokens": estimated_tokens,
+            "estimated_cost": cost,
+            "risk": estimate["risk"],
+        },
+        config=config,
     )
     sys.exit(2)
 
@@ -240,10 +266,11 @@ def main():
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
     transcript_path = payload.get("transcript_path", "")
-    config = load_config()
+    cwd = payload.get("cwd") or os.getcwd()
+    config = load_config(cwd)
 
     if tool_name == "Read":
-        guard_read(tool_input, transcript_path, config)
+        guard_read(tool_input, transcript_path, config, cwd=cwd)
     elif tool_name == "Bash":
         guard_bash(tool_input)
     elif tool_name == "WebFetch":
