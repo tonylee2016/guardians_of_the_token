@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 import termios
 import tty
@@ -342,6 +343,53 @@ def install_claude():
     print(f"Installed Guardians of the Token Claude Code hooks in {claude_dir}")
 
 
+CCSTATUSLINE_CONFIG = Path("~/.config/ccstatusline/settings.json").expanduser()
+GUARDIANS_STATUS_COMMAND = "python3 -m guardians_of_the_token.status"
+GUARDIANS_WIDGET_ID = "guardians"
+
+
+def _ccstatusline_has_guardians(config: dict) -> bool:
+    for line in config.get("lines", []):
+        for widget in line:
+            if widget.get("commandPath") == GUARDIANS_STATUS_COMMAND:
+                return True
+    return False
+
+
+def _ccstatusline_add_guardians(config: dict) -> dict:
+    lines = config.get("lines", [[]])
+    first_line = list(lines[0]) if lines else []
+    used_ids = {str(w.get("id", "")) for line in lines for w in line}
+    sep_id = str(max((int(i) for i in used_ids if i.isdigit()), default=0) + 1)
+    widget_id = str(int(sep_id) + 1)
+    first_line.extend([
+        {"id": sep_id, "type": "separator"},
+        {"id": widget_id, "type": "custom-command", "commandPath": GUARDIANS_STATUS_COMMAND, "color": "green"},
+    ])
+    return {**config, "lines": [first_line, *lines[1:]]}
+
+
+def install_statusline() -> str:
+    """Add guardians to ccstatusline if available, otherwise set standalone statusLine."""
+    if CCSTATUSLINE_CONFIG.exists():
+        config = json.loads(CCSTATUSLINE_CONFIG.read_text())
+        if not _ccstatusline_has_guardians(config):
+            CCSTATUSLINE_CONFIG.write_text(json.dumps(_ccstatusline_add_guardians(config), indent=2) + "\n")
+        return "ccstatusline"
+
+    settings_path = Path("~/.claude/settings.json").expanduser()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    if "statusLine" not in existing:
+        existing["statusLine"] = {
+            "type": "command",
+            "command": GUARDIANS_STATUS_COMMAND,
+            "refreshInterval": 10,
+        }
+        settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    return "standalone"
+
+
 def install_claude_global() -> Path:
     settings_path = Path("~/.claude/settings.json").expanduser()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -349,6 +397,7 @@ def install_claude_global() -> Path:
     merged_hooks = merge_hooks(existing.get("hooks", {}), CLAUDE_HOOKS_JSON["hooks"])
     existing["hooks"] = merged_hooks
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    install_statusline()
     return settings_path
 
 
@@ -608,5 +657,119 @@ def init_project():
     print(f"Project policy appended to {result['claude_path']}")
 
 
+def install_statusline_cmd():
+    parser = argparse.ArgumentParser(
+        description="Add Guardians status to ccstatusline (if installed) or set standalone statusLine."
+    )
+    parser.parse_args()
+    mode = install_statusline()
+    if mode == "ccstatusline":
+        print(f"Added Guardians widget to ccstatusline ({CCSTATUSLINE_CONFIG})")
+    else:
+        print("Set Guardians standalone statusLine in ~/.claude/settings.json")
+
+
+def status():
+    parser = argparse.ArgumentParser(description="Print one-line Guardians status (for status bars).")
+    parser.add_argument("project", nargs="?", default=None, help="Project folder (default: walk up from cwd).")
+    args = parser.parse_args()
+
+    from guardians_of_the_token.status import status_line
+
+    print(status_line(args.project))
+
+
+def report():
+    parser = argparse.ArgumentParser(description="Print local Guardians token savings report.")
+    parser.add_argument(
+        "project",
+        nargs="?",
+        default=".",
+        help="Project folder containing .got/events.jsonl.",
+    )
+    args = parser.parse_args()
+
+    from guardians_of_the_token.report import format_report, report_data
+
+    print(format_report(report_data(Path(args.project).expanduser().resolve())))
+
+
+def doctor():
+    parser = argparse.ArgumentParser(description="Check Guardians installation status.")
+    parser.add_argument(
+        "project",
+        nargs="?",
+        default=".",
+        help="Project folder to inspect for local Guardians state.",
+    )
+    args = parser.parse_args()
+    home = Path.home()
+    project = Path(args.project).expanduser().resolve()
+    codex_hooks = home / ".codex" / "hooks.json"
+    codex_config = home / ".codex" / "config.toml"
+    claude_settings = home / ".claude" / "settings.json"
+    project_config = project / ".guardians.toml"
+    project_events = project / ".got" / "events.jsonl"
+
+    print("Guardians doctor")
+    print()
+    print(f"Codex hooks: {'OK' if codex_hooks.exists() else 'missing'} ({codex_hooks})")
+    if codex_config.exists():
+        text = codex_config.read_text()
+        hooks_status = "OK" if has_feature_line(text, "hooks") else "missing"
+        deprecated = "yes" if "codex_hooks" in text else "no"
+        mcp_status = "OK" if "[mcp_servers.guardians]" in text else "missing"
+        print(f"Codex hooks feature: {hooks_status}")
+        print(f"Codex deprecated codex_hooks: {deprecated}")
+        print(f"Codex MCP: {mcp_status}")
+    else:
+        print(f"Codex config: missing ({codex_config})")
+    print(f"Claude Code hooks: {'OK' if claude_settings.exists() else 'missing'} ({claude_settings})")
+    print(f"Project config: {'OK' if project_config.exists() else 'missing'} ({project_config})")
+    print(f"Project event log: {'OK' if project_events.exists() else 'missing'} ({project_events})")
+    print(f"Bypass file: {'present' if os.path.exists('/tmp/guardians_bypass') else 'not present'}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="guardians",
+        description="Guardians of the Token command line interface.",
+    )
+    subcommands = parser.add_subparsers(dest="command")
+    subcommands.add_parser("install", help="Install detected integrations.")
+    subcommands.add_parser("codex-install", help="Install Codex hooks.")
+    subcommands.add_parser("claude-install", help="Install Claude Code hooks.")
+    subcommands.add_parser("project-init", help="Initialize project policy and .guardians.toml.")
+    subcommands.add_parser("install-statusline", help="Add Guardians to ccstatusline or set standalone statusLine.")
+    subcommands.add_parser("status", help="Print one-line status (for status bars).")
+    subcommands.add_parser("report", help="Print local token savings report.")
+    subcommands.add_parser("dashboard", help="Run local dashboard.")
+    subcommands.add_parser("doctor", help="Check installation status.")
+    args, remaining = parser.parse_known_args()
+
+    if args.command is None:
+        parser.print_help()
+        return
+
+    dispatch = {
+        "install": install_auto,
+        "codex-install": install_codex,
+        "claude-install": install_claude,
+        "project-init": init_project,
+        "install-statusline": install_statusline_cmd,
+        "status": status,
+        "report": report,
+        "doctor": doctor,
+    }
+    if args.command == "dashboard":
+        from guardians_of_the_token.dashboard import main as dashboard_main
+
+        sys.argv = ["guardians dashboard", *remaining]
+        dashboard_main()
+        return
+    sys.argv = [f"guardians {args.command}", *remaining]
+    dispatch[args.command]()
+
+
 if __name__ == "__main__":
-    install_codex()
+    main()
