@@ -11,11 +11,12 @@ import os
 import shlex
 import sys
 
+from guardians_of_the_token.config import estimate_cost, load_config, policy_decision
+from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import agent_feedback, format_context_block
 
 BYPASS_FILE = "/tmp/guardians_bypass"
-CONFIG_FILE = os.path.expanduser("~/.guardians.json")
 
 DEFAULT_WARN_PCT = 20
 COMPACT_PCT = 90
@@ -37,14 +38,6 @@ MODEL_CONTEXT_WINDOWS = {
 
 FULL_FILE_COMMANDS = {"cat", "bat", "batcat", "nl", "more", "less"}
 FETCH_COMMANDS = {"curl", "wget", "fetch"}
-
-
-def load_config() -> dict:
-    try:
-        with open(CONFIG_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
 
 
 def read_tail(path: str, n: int) -> str:
@@ -154,7 +147,7 @@ def resolve_candidate_urls(parts: list) -> list:
     ]
 
 
-def guard_url(url: str, used_tokens: int, context_window: int, warn_tokens: int, model_label: str):
+def guard_url(url: str, used_tokens: int, context_window: int, warn_tokens: int, model_label: str, config: dict, cwd: str):
     try:
         head = url_head_metadata(url)
     except Exception:
@@ -174,6 +167,7 @@ def guard_url(url: str, used_tokens: int, context_window: int, warn_tokens: int,
     critical = after_pct >= COMPACT_PCT
     content_length = head["content_length"]
     size_kb = content_length // 1024 if content_length is not None else None
+    cost = estimate_cost(estimated_tokens, config, model_label)
 
     reason = format_context_block(
         target=url,
@@ -185,14 +179,28 @@ def guard_url(url: str, used_tokens: int, context_window: int, warn_tokens: int,
         action="fetch",
         blocked_item="command",
         size_kb=None if critical else size_kb,
+        estimated_cost=cost,
         critical=critical,
+    )
+    log_event(
+        {
+            "client": "codex",
+            "kind": "url",
+            "target": url,
+            "action": "blocked",
+            "estimated_tokens": estimated_tokens,
+            "estimated_cost": cost,
+            "risk": estimate["risk"],
+        },
+        config=config,
+        base_dir=cwd,
     )
     feedback = agent_feedback("url")
     deny(reason, feedback)
 
 
 def context_from_payload(payload: dict) -> tuple:
-    config = load_config()
+    config = load_config(payload.get("cwd") or os.getcwd())
     warn_pct = config.get("warn_threshold_pct", DEFAULT_WARN_PCT)
     model, used_tokens = detect_model_and_usage(payload.get("transcript_path", ""))
     if not model:
@@ -200,10 +208,13 @@ def context_from_payload(payload: dict) -> tuple:
     context_window = model_to_context_window(model)
     warn_tokens = int(context_window * warn_pct / 100)
     model_label = model or "unknown model"
-    return used_tokens, context_window, warn_tokens, model_label
+    return used_tokens, context_window, warn_tokens, model_label, config
 
 
-def guard_file(path: str, used_tokens: int, context_window: int, warn_tokens: int, model_label: str):
+def guard_file(path: str, used_tokens: int, context_window: int, warn_tokens: int, model_label: str, config: dict, cwd: str):
+    decision = policy_decision(path, load_config(path))
+    if decision in {"whitelisted", "ignored"}:
+        return
     estimate = estimate_file(
         path,
         context_window=context_window,
@@ -215,6 +226,7 @@ def guard_file(path: str, used_tokens: int, context_window: int, warn_tokens: in
 
     after_pct = ((used_tokens + file_tokens) / context_window) * 100
     critical = after_pct >= COMPACT_PCT
+    cost = estimate_cost(file_tokens, config, model_label)
 
     reason = format_context_block(
         target=path,
@@ -225,7 +237,21 @@ def guard_file(path: str, used_tokens: int, context_window: int, warn_tokens: in
         kind="file",
         action="read",
         blocked_item="command",
+        estimated_cost=cost,
         critical=critical,
+    )
+    log_event(
+        {
+            "client": "codex",
+            "kind": "file",
+            "target": path,
+            "action": "blocked",
+            "estimated_tokens": file_tokens,
+            "estimated_cost": cost,
+            "risk": estimate["risk"],
+        },
+        config=config,
+        base_dir=cwd,
     )
     feedback = agent_feedback("file")
     deny(reason, feedback)
@@ -244,7 +270,7 @@ def main():
         return
 
     tool_input = payload.get("tool_input", {})
-    used_tokens, context_window, warn_tokens, model_label = context_from_payload(payload)
+    used_tokens, context_window, warn_tokens, model_label, config = context_from_payload(payload)
     command = tool_input.get("command", "")
     cwd = payload.get("cwd") or os.getcwd()
 
@@ -254,10 +280,10 @@ def main():
         return
 
     for url in resolve_candidate_urls(parts):
-        guard_url(url, used_tokens, context_window, warn_tokens, model_label)
+        guard_url(url, used_tokens, context_window, warn_tokens, model_label, config, cwd)
 
     for path in resolve_candidate_files(parts, cwd):
-        guard_file(path, used_tokens, context_window, warn_tokens, model_label)
+        guard_file(path, used_tokens, context_window, warn_tokens, model_label, config, cwd)
 
 
 if __name__ == "__main__":

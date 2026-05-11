@@ -8,6 +8,8 @@ Exit 0: pass through. Exit 2: block and show warning to Claude.
 import json
 import sys
 
+from guardians_of_the_token.config import estimate_cost, load_config
+from guardians_of_the_token.events import log_event
 from guardians_of_the_token.messages import format_output_block
 from guardians_of_the_token.test_support import get_test_output_tokens
 
@@ -52,13 +54,30 @@ def main():
     if tokens is None:
         tokens = count_tokens(text)
 
-    if tokens > SOFT_CAP:
+    config = load_config(payload.get("cwd"))
+    soft_cap = int(config.get("max_output_tokens", SOFT_CAP))
+    if tokens > soft_cap:
+        cost = estimate_cost(tokens, config, str(payload.get("model", "") or ""))
         print(
             format_output_block(
                 tool_name=tool_name,
                 tokens=tokens,
-                soft_cap=SOFT_CAP,
+                soft_cap=soft_cap,
+                estimated_cost=cost,
             )
+        )
+        log_event(
+            {
+                "client": "claude",
+                "kind": "output",
+                "target": f"{tool_name} output",
+                "action": "suppressed",
+                "estimated_tokens": tokens,
+                "estimated_cost": cost,
+                "risk": "warning",
+            },
+            config=config,
+            base_dir=payload.get("cwd"),
         )
         sys.exit(2)
 

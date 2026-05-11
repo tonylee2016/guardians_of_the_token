@@ -9,12 +9,15 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from guardians_of_the_token import __version__
+from guardians_of_the_token.config import estimate_cost, load_config as load_guardians_config, policy_decision
+from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import format_context_block
 from guardians_of_the_token.test_support import TEST_URL_SIZES
 from guardians_of_the_token.utils import count_tokens
 
-SERVER_INFO = {"name": "guardians-of-the-token", "version": "0.1.0"}
+SERVER_INFO = {"name": "guardians-of-the-token", "version": __version__}
 PROTOCOL_VERSION = "2024-11-05"
 
 DEFAULT_CONTEXT_WINDOW = 200_000
@@ -59,19 +62,17 @@ def safe_path(raw_path: str) -> Path:
 
 
 def load_config() -> dict:
-    try:
-        with open(Path("~/.guardians.json").expanduser()) as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return load_guardians_config()
 
 
 def configured_context_window(args: dict) -> int:
-    return int(args.get("context_window") or load_config().get("context_window") or DEFAULT_CONTEXT_WINDOW)
+    config = load_guardians_config(args.get("path") or args.get("project_path") or ".")
+    return int(args.get("context_window") or config.get("context_window") or DEFAULT_CONTEXT_WINDOW)
 
 
 def configured_warn_pct(args: dict) -> int:
-    return int(args.get("warn_threshold_pct") or load_config().get("warn_threshold_pct") or DEFAULT_WARN_PCT)
+    config = load_guardians_config(args.get("path") or args.get("project_path") or ".")
+    return int(args.get("warn_threshold_pct") or config.get("warn_threshold_pct") or DEFAULT_WARN_PCT)
 
 
 def file_fingerprint(path: Path) -> dict:
@@ -90,15 +91,20 @@ def source_metadata(path: Path, args: dict) -> dict:
         raise ValueError(f"{path} is not a regular file")
     context_window = configured_context_window(args)
     warn_pct = configured_warn_pct(args)
+    config = load_guardians_config(path)
     estimate = estimate_file(str(path), context_window=context_window, warn_pct=warn_pct)
+    policy = policy_decision(str(path), config)
+    cost = estimate_cost(estimate["estimated_tokens"], config)
     return {
         "path": str(path),
         "kind": "file",
         "bytes": estimate["bytes"],
         "estimated_tokens": estimate["estimated_tokens"],
+        "estimated_cost": cost,
         "context_window": context_window,
         "warn_threshold_pct": warn_pct,
         "risk": estimate["risk"],
+        "policy": policy,
         "confidence": estimate["confidence"],
         "method": estimate["method"],
         "signals": estimate["signals"],
@@ -107,6 +113,10 @@ def source_metadata(path: Path, args: dict) -> dict:
 
 
 def warning_for(meta: dict) -> str:
+    if meta.get("policy") == "whitelisted":
+        return "This source is whitelisted by Guardians policy."
+    if meta.get("policy") == "ignored":
+        return "This source is ignored by Guardians policy."
     if meta["risk"] == "safe":
         return "This source is within the configured Guardians threshold."
     return format_context_block(
@@ -118,6 +128,7 @@ def warning_for(meta: dict) -> str:
         kind="file",
         action="read",
         blocked_item="source",
+        estimated_cost=meta.get("estimated_cost"),
         critical=meta["risk"] == "critical",
     )
 
@@ -141,6 +152,7 @@ def warning_for_url(meta: dict) -> str:
         action="fetch",
         blocked_item="source",
         size_kb=None if meta["risk"] == "critical" else meta["bytes"] // 1024,
+        estimated_cost=meta.get("estimated_cost"),
         critical=meta["risk"] == "critical",
     )
 
@@ -169,6 +181,7 @@ def url_metadata(url: str, args: dict) -> dict:
     context_window = configured_context_window(args)
     warn_pct = configured_warn_pct(args)
     head = url_head_metadata(url)
+    config = load_guardians_config(storage_root)
     estimate = estimate_url(
         url,
         context_window=context_window,
@@ -176,12 +189,14 @@ def url_metadata(url: str, args: dict) -> dict:
         content_length=head["content_length"],
         content_type=head.get("content_type"),
     )
+    cost = estimate_cost(estimate["estimated_tokens"], config)
     (index_path,) = url_index_paths(url, storage_root)
     return {
         "url": url,
         "kind": "url",
         "bytes": estimate["bytes"],
         "estimated_tokens": estimate["estimated_tokens"],
+        "estimated_cost": cost,
         "context_window": context_window,
         "warn_threshold_pct": warn_pct,
         "risk": estimate["risk"],
@@ -239,21 +254,32 @@ def got_project_init(args: dict) -> dict:
         project_dir = path
     storage = got_dir(project_dir)
     policy_path = storage / "GUARDIANS_PROJECT_POLICY.md"
+    config_path = project_dir / ".guardians.toml"
     claude_path = project_dir / "CLAUDE.md"
     (storage / "index").mkdir(parents=True, exist_ok=True)
     policy = project_policy_text()
     policy_path.write_text(policy)
+    if not config_path.exists():
+        config_path.write_text(
+            "warn_threshold_pct = 20\n"
+            "max_output_tokens = 8000\n"
+            "default_input_price_per_million = 3.0\n\n"
+            "whitelist = [\"README.md\", \"docs/**\"]\n"
+            "ignore = [\"node_modules/**\", \".git/**\", \"dist/**\", \"build/**\"]\n"
+        )
     append_claude_policy(claude_path, policy)
     return {
         "project_dir": str(project_dir),
         "got_dir": str(storage),
         "claude_path": str(claude_path),
+        "config_path": str(config_path),
         "policy_path": str(policy_path),
         "index_dir": str(storage / "index"),
         "next_steps": [
             "Review the GOT policy appended to CLAUDE.md.",
             "Keep GOT MCP enabled for this project.",
             "Run got_file_size before analyzing unknown or potentially large local files.",
+            "Review .guardians.toml if you want project-level thresholds, cost estimates, whitelist, or ignore rules.",
         ],
         "policy": policy,
     }
@@ -287,6 +313,20 @@ def got_file_size(args: dict) -> dict:
     path = safe_path(args.get("path", ""))
     meta = source_metadata(path, args)
     meta["warning"] = warning_for(meta)
+    if meta["risk"] in {"warning", "critical"} and meta.get("policy") == "guarded":
+        log_event(
+            {
+                "client": "mcp",
+                "kind": "file",
+                "target": meta["path"],
+                "action": "preflight_warning",
+                "estimated_tokens": meta["estimated_tokens"],
+                "estimated_cost": meta["estimated_cost"],
+                "risk": meta["risk"],
+            },
+            config=load_guardians_config(path),
+            base_dir=path,
+        )
     return meta
 
 
@@ -310,6 +350,20 @@ def got_url_size(args: dict) -> dict:
     meta = write_url_index(url_metadata(url, args))
     meta["cached"] = False
     meta["warning"] = warning_for_url(meta)
+    if meta["risk"] in {"warning", "critical"}:
+        log_event(
+            {
+                "client": "mcp",
+                "kind": "url",
+                "target": meta["url"],
+                "action": "preflight_warning",
+                "estimated_tokens": meta["estimated_tokens"],
+                "estimated_cost": meta["estimated_cost"],
+                "risk": meta["risk"],
+            },
+            config=load_guardians_config(meta.get("index_path")),
+            base_dir=meta.get("index_path"),
+        )
     return meta
 
 

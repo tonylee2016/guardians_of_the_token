@@ -8,6 +8,8 @@ Suppresses oversized Bash output before it enters model context.
 import json
 import sys
 
+from guardians_of_the_token.config import estimate_cost, load_config
+from guardians_of_the_token.events import log_event
 from guardians_of_the_token.messages import agent_feedback, format_output_block
 from guardians_of_the_token.test_support import get_test_output_tokens
 
@@ -51,11 +53,27 @@ def main():
     tokens = get_test_output_tokens()
     if tokens is None:
         tokens = count_tokens(text)
-    if tokens <= SOFT_CAP:
+    config = load_config(payload.get("cwd"))
+    soft_cap = int(config.get("max_output_tokens", SOFT_CAP))
+    if tokens <= soft_cap:
         return
 
-    reason = format_output_block(tool_name="Bash", tokens=tokens, soft_cap=SOFT_CAP)
+    cost = estimate_cost(tokens, config, str(payload.get("model", "") or ""))
+    reason = format_output_block(tool_name="Bash", tokens=tokens, soft_cap=soft_cap, estimated_cost=cost)
     feedback = agent_feedback("output")
+    log_event(
+        {
+            "client": "codex",
+            "kind": "output",
+            "target": "Bash output",
+            "action": "suppressed",
+            "estimated_tokens": tokens,
+            "estimated_cost": cost,
+            "risk": "warning",
+        },
+        config=config,
+        base_dir=payload.get("cwd"),
+    )
     payload = {
         "decision": "block",
         "reason": reason,
