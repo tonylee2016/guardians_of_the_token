@@ -25,6 +25,7 @@ test = [
 ]
 
 [project.scripts]
+guardians = "guardians_of_the_token.cli:main"
 guardians-install = "guardians_of_the_token.cli:install_auto"
 guardians-claude-install = "guardians_of_the_token.cli:install_claude"
 guardians-codex-install = "guardians_of_the_token.cli:install_codex"
@@ -34,6 +35,8 @@ guardians-codex-post-tool = "guardians_of_the_token.codex.post_tool_guard:main"
 guardians-test-server = "guardians_of_the_token.test_server:main"
 guardians-mcp = "guardians_of_the_token.mcp_server:main"
 guardians-proxy = "guardians_of_the_token.proxy:main"
+guardians-report = "guardians_of_the_token.cli:report"
+guardians-dashboard = "guardians_of_the_token.dashboard:main"
 
 [tool.setuptools.packages.find]
 include = ["guardians_of_the_token*"]

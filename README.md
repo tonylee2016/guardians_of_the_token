@@ -1,5 +1,11 @@
 # GOT
 
+[![PyPI package](https://img.shields.io/pypi/v/guardians-of-the-token?label=pypi%20package)](https://pypi.org/project/guardians-of-the-token/)
+[![Supported Python version](https://img.shields.io/pypi/pyversions/guardians-of-the-token?label=supported%20python%20version)](https://pypi.org/project/guardians-of-the-token/)
+[![License](https://img.shields.io/pypi/l/guardians-of-the-token?label=license)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/tonylee2016/guardians_of_the_token?style=social)](https://github.com/tonylee2016/guardians_of_the_token/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/tonylee2016/guardians_of_the_token/ci.yml?branch=main&label=ci)](https://github.com/tonylee2016/guardians_of_the_token/actions/workflows/ci.yml)
+
 ![GOT hero image](assets/got-hero-cartoon.png)
 
 **Guardians of the Token** is a safety layer for agentic coding sessions. It helps Claude Code, Codex, and other LLM clients avoid accidental context explosions from huge files, oversized web fetches, and noisy tool output.
@@ -205,15 +211,51 @@ Optional user config lives at `~/.guardians.json`:
 
 ```json
 {
-  "warn_threshold_pct": 20
+  "warn_threshold_pct": 20,
+  "default_input_price_per_million": 3.0,
+  "max_output_tokens": 8000
 }
 ```
+
+Project config can live in `.guardians.toml`:
+
+```toml
+warn_threshold_pct = 10
+max_output_tokens = 8000
+default_input_price_per_million = 3.0
+
+whitelist = ["README.md", "docs/**"]
+ignore = ["node_modules/**", ".git/**", "dist/**", "build/**"]
+```
+
+Whitelisted and ignored files are allowed through without blocking. Use this
+for known-safe paths that agents often inspect.
 
 Bypass is single-use:
 
 ```bash
 touch /tmp/guardians_bypass
 ```
+
+## Local Reports
+
+GOT records blocked and suppressed operations locally under `.got/events.jsonl`.
+It does not send telemetry anywhere.
+
+Print a local savings report:
+
+```bash
+guardians-report
+```
+
+Run the local dashboard:
+
+```bash
+guardians-dashboard
+```
+
+The dashboard binds to `127.0.0.1:8766` by default and shows estimated tokens
+and dollars saved, top risky files/URLs, and activity by client.
 
 ## Test Fixtures
 

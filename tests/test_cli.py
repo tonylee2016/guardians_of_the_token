@@ -11,6 +11,7 @@ from guardians_of_the_token.cli import (
     install_codex,
     install_claude_desktop_mcp,
     init_project,
+    main,
     merge_hooks,
     show_install_banner,
     workspace_parser,
@@ -374,3 +375,38 @@ def test_install_auto_fails_when_no_client_home_detected(tmp_path, monkeypatch):
         )
     else:
         raise AssertionError("install_auto should exit when no client home is detected")
+
+
+def test_guardians_main_prints_help_without_subcommand(capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["guardians"])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "Guardians of the Token command line interface" in out
+    assert "install" in out
+    assert "doctor" in out
+
+
+def test_guardians_report_subcommand(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["guardians", "report", str(tmp_path)])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "Guardians report" in out
+    assert "Estimated tokens saved" in out
+
+
+def test_guardians_doctor_subcommand(tmp_path, monkeypatch, capsys):
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text("[features]\nhooks = true\n")
+    monkeypatch.setattr("pathlib.Path.home", lambda: home)
+    monkeypatch.setattr("sys.argv", ["guardians", "doctor", str(tmp_path)])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "Guardians doctor" in out
+    assert "Codex hooks feature: OK" in out
