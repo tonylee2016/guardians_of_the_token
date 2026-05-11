@@ -47,6 +47,7 @@ def format_context_block(
     action: str,
     blocked_item: str = "command",
     size_kb: Optional[int] = None,
+    estimated_cost: Optional[float] = None,
     critical: bool = False,
 ) -> str:
     used_pct = (used_tokens / context_window) * 100
@@ -65,6 +66,8 @@ def format_context_block(
         f"Estimate: ~{estimated_tokens:,} tokens "
         f"({target_pct:.0f}% of the {context_window:,}-token window on {model_label})"
     )
+    if estimated_cost is not None:
+        lines.append(f"Estimated input cost: ~${estimated_cost:.4f}")
     if critical:
         lines.append(f"After {action}: ~{after_tokens:,} tokens ({after_pct:.0f}%)")
         lines.append("Risk: likely context compaction.")
@@ -81,14 +84,21 @@ def format_context_block(
     return "\n".join(lines)
 
 
-def format_output_block(*, tool_name: str, tokens: int, soft_cap: int) -> str:
-    return "\n".join(
+def format_output_block(*, tool_name: str, tokens: int, soft_cap: int, estimated_cost: Optional[float] = None) -> str:
+    lines = [
+        f"{GUARD_LABEL} suppressed large {tool_name} output.",
+        f"Estimate: ~{tokens:,} tokens",
+    ]
+    if estimated_cost is not None:
+        lines.append(f"Estimated input cost avoided: ~${estimated_cost:.4f}")
+    lines.extend(
         [
-            f"{GUARD_LABEL} suppressed large {tool_name} output.",
-            f"Estimate: ~{tokens:,} tokens",
             f"Limit: {soft_cap:,}-token soft cap",
             output_next_steps(),
         ]
+    )
+    return "\n".join(
+        lines
     )
 
 
