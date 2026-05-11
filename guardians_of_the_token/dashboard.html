@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guardians Dashboard</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #101316; color: #eef2f6; }
+    main { max-width: 1040px; margin: 0 auto; padding: 40px 24px; }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    p { color: #aab3bf; margin: 0 0 28px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .card { border: 1px solid #303842; border-radius: 8px; padding: 20px; background: #151a20; }
+    .metric { font-size: 34px; font-weight: 700; margin-top: 8px; }
+    .label { color: #aab3bf; font-size: 14px; }
+    section { margin-top: 18px; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid #28313a; }
+    li span { color: #d7dde5; overflow-wrap: anywhere; }
+    li strong { white-space: nowrap; }
+    pre { overflow: auto; padding: 16px; background: #0b0e11; border: 1px solid #303842; border-radius: 8px; color: #cbd5df; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Guardians Dashboard</h1>
+    <p>Local token-cost guardrail report. No telemetry leaves this machine.</p>
+    <div class="grid">
+      <div class="card"><div class="label">Tokens saved</div><div class="metric">${tokens_saved}</div></div>
+      <div class="card"><div class="label">Cost avoided</div><div class="metric">${cost_saved}</div></div>
+      <div class="card"><div class="label">Blocks/suppressions</div><div class="metric">${blocked_operations}</div></div>
+    </div>
+    <section class="card">
+      <h2>Top risky targets</h2>
+      <ul>${targets}</ul>
+    </section>
+    <section class="card">
+      <h2>By client</h2>
+      <ul>${clients}</ul>
+    </section>
+    <section>
+      <h2>Raw data</h2>
+      <pre>${raw_data}</pre>
+    </section>
+  </main>
+</body>
+</html>
