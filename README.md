@@ -213,7 +213,10 @@ Optional user config lives at `~/.guardians.json`:
 {
   "warn_threshold_pct": 20,
   "default_input_price_per_million": 3.0,
-  "max_output_tokens": 8000
+  "max_output_tokens": 8000,
+  "telemetry_enabled": false,
+  "telemetry_host": "https://us.i.posthog.com",
+  "telemetry_api_key": "phc_..."
 }
 ```
 
@@ -223,6 +226,7 @@ Project config can live in `.guardians.toml`:
 warn_threshold_pct = 10
 max_output_tokens = 8000
 default_input_price_per_million = 3.0
+telemetry_enabled = false
 
 whitelist = ["README.md", "docs/**"]
 ignore = ["node_modules/**", ".git/**", "dist/**", "build/**"]
@@ -240,7 +244,14 @@ touch /tmp/guardians_bypass
 ## Local Reports
 
 GOT records blocked and suppressed operations locally under `.got/events.jsonl`.
-It does not send telemetry anywhere.
+Telemetry is off by default. If you opt in, GOT sends one anonymous install
+event to a PostHog-compatible capture endpoint. It only sends anonymous
+installation ID, GOT version, Python version, and OS. GOT does not send IP as
+event data and disables PostHog GeoIP enrichment. It never sends paths, URLs,
+prompts, file contents, command text, tool usage, risk levels, actions,
+geolocation, or token counts. The installer shows telemetry as a default-on
+selectable option and writes your choice to `~/.guardians.json`. You can
+override it with `GUARDIANS_TELEMETRY=0` or `GUARDIANS_TELEMETRY=1`.
 
 Print a local savings report:
 

@@ -13,6 +13,7 @@ from guardians_of_the_token.cli import (
     init_project,
     main,
     merge_hooks,
+    preflight,
     show_install_banner,
     workspace_parser,
 )
@@ -217,7 +218,7 @@ def test_install_auto_installs_selected_client_interactively(tmp_path, monkeypat
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr("pathlib.Path.home", lambda: home)
     monkeypatch.setattr("sys.argv", ["guardians-install"])
-    responses = iter(["2", "3", ""])
+    responses = iter(["2", "3", "4", ""])
     monkeypatch.setattr("builtins.input", lambda _: next(responses))
     monkeypatch.setattr(
         "guardians_of_the_token.cli.ensure_test_files",
@@ -228,13 +229,14 @@ def test_install_auto_installs_selected_client_interactively(tmp_path, monkeypat
 
     out = capsys.readouterr().out
     assert "Guardians of the Token is now watching the risky paths." in out
-    assert "Detected installable integrations:" in out
+    assert "Choose integrations:" in out
     assert "Codex CLI hooks" in out
     assert "Codex app MCP" in out
     assert "Claude Code hooks" in out
     assert "[x] 1) Codex CLI hooks" in out
     assert "[ ] 2) Codex app MCP" in out
     assert "[ ] 3) Claude Code hooks" in out
+    assert "[ ] 4) Anonymous telemetry" in out
     assert "Installed Guardians into:" in out
     installed_section = out.split("Installed Guardians into:\n", 1)[1]
     assert "- OK Codex CLI hooks" in installed_section
@@ -242,6 +244,9 @@ def test_install_auto_installs_selected_client_interactively(tmp_path, monkeypat
     assert "Claude Code hooks" not in installed_section
     assert (home / ".codex" / "hooks.json").exists()
     assert not (home / ".claude" / "settings.json").exists()
+    user_config = json.loads((home / ".guardians.json").read_text())
+    assert user_config["telemetry_enabled"] is False
+    assert user_config["telemetry_api_key"].startswith("phc_")
     assert fixture_marker.read_text() == "fixtures refreshed"
 
 
@@ -271,6 +276,9 @@ def test_install_auto_yes_installs_all_detected_clients(tmp_path, monkeypatch, c
     assert "- OK Claude Code hooks" in out
     assert (home / ".codex" / "hooks.json").exists()
     assert (home / ".claude" / "settings.json").exists()
+    user_config = json.loads((home / ".guardians.json").read_text())
+    assert user_config["telemetry_enabled"] is True
+    assert user_config["telemetry_api_key"].startswith("phc_")
 
 
 def test_install_claude_desktop_mcp_writes_desktop_config(tmp_path, monkeypatch):
@@ -311,6 +319,19 @@ def test_project_init_cli_uses_existing_mcp_handler(tmp_path, monkeypatch, capsy
     assert "Initialized Guardians project storage" in out
     assert (tmp_path / ".got" / "GUARDIANS_PROJECT_POLICY.md").exists()
     assert "<!-- guardians-of-the-token:start -->" in (tmp_path / "CLAUDE.md").read_text()
+
+
+def test_preflight_cli_prints_json_metadata(tmp_path, monkeypatch, capsys):
+    target = tmp_path / "small.txt"
+    target.write_text("hello\n")
+    monkeypatch.setattr("sys.argv", ["guardians preflight", "--json", str(target)])
+
+    preflight()
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["path"] == str(target)
+    assert data["risk"] == "safe"
+    assert "warning" in data
 
 
 def test_install_auto_reprompts_on_invalid_selection(tmp_path, monkeypatch, capsys):

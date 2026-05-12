@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from guardians_of_the_token.test_support import ensure_test_files
+from guardians_of_the_token.config import DEFAULT_CONFIG
 
 
 HOOKS_JSON = {
@@ -455,12 +456,14 @@ def show_install_banner() -> None:
     print()
 
 
+TELEMETRY_OPTION = "telemetry"
+
+
 def select_clients_interactive(integrations: list[str]) -> list[str]:
-    if len(integrations) <= 1:
-        return integrations
+    options = [*integrations, TELEMETRY_OPTION]
     if sys.stdin.isatty() and sys.stdout.isatty():
-        return select_clients_tty(integrations)
-    return select_clients_text(integrations)
+        return select_clients_tty(options, integrations)
+    return select_clients_text(options, integrations)
 
 
 def client_labels() -> dict[str, str]:
@@ -469,6 +472,7 @@ def client_labels() -> dict[str, str]:
         "codex_mcp": "Codex app MCP",
         "claude_code_hooks": "Claude Code hooks",
         "claude_desktop_mcp": "Claude Desktop MCP",
+        TELEMETRY_OPTION: "Anonymous telemetry",
     }
 
 
@@ -478,20 +482,21 @@ def client_descriptions() -> dict[str, str]:
         "codex_mcp": "Registers got_file_size and safe bounded tools in the Codex app.",
         "claude_code_hooks": "Guards Claude Code Read, Bash, WebFetch, and oversized output.",
         "claude_desktop_mcp": "Registers GOT MCP tools for Claude Desktop project workflows.",
+        TELEMETRY_OPTION: "Sends anonymous install/tool usage metadata only. No paths, URLs, prompts, content, commands, actions, risk, or token counts.",
     }
 
 
-def select_clients_text(integrations: list[str]) -> list[str]:
+def select_clients_text(options: list[str], integrations: list[str]) -> list[str]:
     labels = client_labels()
     descriptions = client_descriptions()
-    selected = list(integrations)
+    selected = list(options)
 
     while True:
-        print("Detected installable integrations:")
-        for index, integration in enumerate(integrations, 1):
-            checked = "x" if integration in selected else " "
-            print(f"  [{checked}] {index}) {labels[integration]}")
-            print(f"      {descriptions[integration]}")
+        print("Choose integrations:")
+        for index, option in enumerate(options, 1):
+            checked = "x" if option in selected else " "
+            print(f"  [{checked}] {index}) {labels[option]}")
+            print(f"      {descriptions[option]}")
         print()
         raw_choice = input(
             "Toggle by number, comma-separated numbers, or press Enter to install selected: "
@@ -509,14 +514,14 @@ def select_clients_text(integrations: list[str]) -> list[str]:
                 invalid = True
                 break
             index = int(token) - 1
-            if index < 0 or index >= len(integrations):
+            if index < 0 or index >= len(options):
                 invalid = True
                 break
-            integration = integrations[index]
-            if integration in selected:
-                selected.remove(integration)
+            option = options[index]
+            if option in selected:
+                selected.remove(option)
             else:
-                selected.append(integration)
+                selected.append(option)
         if not invalid:
             print()
             continue
@@ -541,7 +546,7 @@ def read_terminal_key() -> str:
     return ch.lower()
 
 
-def render_tty_selector(integrations: list[str], selected: list[str], cursor: int, message: str = "") -> None:
+def render_tty_selector(options: list[str], selected: list[str], cursor: int, message: str = "") -> None:
     labels = client_labels()
     descriptions = client_descriptions()
     print("\033[2J\033[H", end="")
@@ -550,20 +555,20 @@ def render_tty_selector(integrations: list[str], selected: list[str], cursor: in
     print(color("Choose integrations", "bold"))
     print(color("Use Up/Down to move, Space to toggle, Enter to install.", "dim"))
     print()
-    for index, integration in enumerate(integrations):
+    for index, option in enumerate(options):
         focused = index == cursor
         pointer = color(">", "yellow", "bold") if focused else " "
-        checked = color("x", "green", "bold") if integration in selected else " "
-        label = color(labels[integration], "bold") if focused else labels[integration]
+        checked = color("x", "green", "bold") if option in selected else " "
+        label = color(labels[option], "bold") if focused else labels[option]
         print(f"{pointer} [{checked}] {label}")
-        print(f"    {color(descriptions[integration], 'dim')}")
+        print(f"    {color(descriptions[option], 'dim')}")
     if message:
         print()
         print(color(message, "yellow"))
 
 
-def select_clients_tty(integrations: list[str]) -> list[str]:
-    selected = list(integrations)
+def select_clients_tty(options: list[str], integrations: list[str]) -> list[str]:
+    selected = list(options)
     cursor = 0
     old_settings = termios.tcgetattr(sys.stdin.fileno())
     try:
@@ -571,23 +576,23 @@ def select_clients_tty(integrations: list[str]) -> list[str]:
         print("\033[?25l", end="")
         message = ""
         while True:
-            render_tty_selector(integrations, selected, cursor, message)
+            render_tty_selector(options, selected, cursor, message)
             key = read_terminal_key()
             message = ""
             if key == "up":
-                cursor = (cursor - 1) % len(integrations)
+                cursor = (cursor - 1) % len(options)
             elif key == "down":
-                cursor = (cursor + 1) % len(integrations)
+                cursor = (cursor + 1) % len(options)
             elif key == "space":
-                integration = integrations[cursor]
-                if integration in selected:
-                    selected.remove(integration)
+                option = options[cursor]
+                if option in selected:
+                    selected.remove(option)
                 else:
-                    selected.append(integration)
+                    selected.append(option)
             elif key == "a":
-                selected = list(integrations)
+                selected = list(options)
             elif key == "enter":
-                if selected:
+                if any(item in selected for item in integrations):
                     print("\033[2J\033[H", end="")
                     return selected
                 message = "Select at least one integration before installing."
@@ -596,6 +601,25 @@ def select_clients_tty(integrations: list[str]) -> list[str]:
     finally:
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
         print("\033[?25h", end="")
+
+
+def configure_user_telemetry(enabled: bool) -> None:
+    user_config = Path("~/.guardians.json").expanduser()
+    existing: dict[str, Any] = {}
+    if user_config.exists():
+        try:
+            existing = json.loads(user_config.read_text())
+        except Exception:
+            existing = {}
+    existing["telemetry_enabled"] = enabled
+    existing["telemetry_host"] = DEFAULT_CONFIG["telemetry_host"]
+    existing["telemetry_api_key"] = DEFAULT_CONFIG["telemetry_api_key"]
+    user_config.parent.mkdir(parents=True, exist_ok=True)
+    user_config.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
+    if enabled:
+        from guardians_of_the_token.telemetry import capture_install
+
+        capture_install(config=existing)
 
 
 def install_auto():
@@ -615,7 +639,8 @@ def install_auto():
             "No supported client home was detected. Expected ~/.codex and/or ~/.claude."
         )
     show_install_banner()
-    selected = integrations if args.yes else select_clients_interactive(integrations)
+    selected = [*integrations, TELEMETRY_OPTION] if args.yes else select_clients_interactive(integrations)
+    configure_user_telemetry(TELEMETRY_OPTION in selected)
 
     installed = []
     if "codex_hooks" in selected:
@@ -685,6 +710,30 @@ def status():
     print(status_line(args.project))
 
 
+def preflight():
+    parser = argparse.ArgumentParser(description="Preflight a local file and print its GOT risk.")
+    parser.add_argument("path", help="File path to check.")
+    parser.add_argument("--json", action="store_true", help="Print the full metadata as JSON.")
+    parser.add_argument("--context-window", type=int, default=None, help="Override context window.")
+    parser.add_argument("--warn-threshold-pct", type=int, default=None, help="Override warning threshold percent.")
+    args = parser.parse_args()
+
+    from guardians_of_the_token.mcp_server import got_file_size
+
+    payload: dict[str, Any] = {"path": args.path}
+    if args.context_window is not None:
+        payload["context_window"] = args.context_window
+    if args.warn_threshold_pct is not None:
+        payload["warn_threshold_pct"] = args.warn_threshold_pct
+    result = got_file_size(payload)
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    print(f"{result['risk']}: ~{result['estimated_tokens']:,} tokens")
+    if result["risk"] != "safe":
+        print(result["warning"])
+
+
 def report():
     parser = argparse.ArgumentParser(description="Print local Guardians token savings report.")
     parser.add_argument(
@@ -748,6 +797,7 @@ def main():
     subcommands.add_parser("project-init", help="Initialize project policy and .guardians.toml.")
     subcommands.add_parser("install-statusline", help="Add Guardians to ccstatusline or set standalone statusLine.")
     subcommands.add_parser("status", help="Print one-line status (for status bars).")
+    subcommands.add_parser("preflight", help="Preflight a local file.")
     subcommands.add_parser("report", help="Print local token savings report.")
     subcommands.add_parser("dashboard", help="Run local dashboard.")
     subcommands.add_parser("doctor", help="Check installation status.")
@@ -764,6 +814,7 @@ def main():
         "project-init": init_project,
         "install-statusline": install_statusline_cmd,
         "status": status,
+        "preflight": preflight,
         "report": report,
         "doctor": doctor,
     }
