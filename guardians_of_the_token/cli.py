@@ -413,7 +413,28 @@ def install_claude_global() -> Path:
     existing["hooks"] = merged_hooks
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
     install_statusline()
+    _ensure_prompt_guard_model()
     return settings_path
+
+
+def _ensure_prompt_guard_model() -> None:
+    """Pre-fetch the prompt-guard embedding model so first-prompt latency
+    isn't dominated by a one-time download. Best-effort: surface a hint but
+    don't fail the install if it can't reach HuggingFace."""
+    try:
+        from guardians_of_the_token.embeddings import ensure_model
+
+        print(color("Fetching prompt-guard embedding model...", "blue", "bold"))
+        path = ensure_model()
+        print(color(f"OK Prompt-guard model ready in {path}", "green"))
+    except Exception as exc:  # noqa: BLE001 — install must not hard-fail on network errors
+        print(
+            color(
+                "WARN  Could not pre-fetch prompt-guard model: "
+                f"{exc}\n      Run `guardians-download-models` manually before first use.",
+                "yellow",
+            )
+        )
 
 
 def claude_desktop_config_path() -> Path:
