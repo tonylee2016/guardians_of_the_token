@@ -148,7 +148,9 @@ def _block_reason(
         f"Context: {_format_tokens(live_tokens)} / {_format_tokens(window)} "
         f"tokens ({ctx_pct:.0f}%)\n"
         f"Estimated cost if sent: ${estimated_cost:.4f}\n\n"
-        f"To continue anyway, resend the same prompt prefixed with {prefix}."
+        "To continue anyway, resend the prompt as either:\n"
+        "  /got-unblock <your prompt>\n"
+        f"  {prefix} <your prompt>"
     )
 
 

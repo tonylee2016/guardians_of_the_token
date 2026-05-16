@@ -434,6 +434,7 @@ def test_main_logs_blocked_event_locally(tmp_path, monkeypatch):
     assert result.returncode == 0
     out = json.loads(result.stdout)
     assert out["decision"] == "block"
+    assert "/got-unblock" in out["reason"]
     assert "GOT_UNBLOCK" in out["reason"]
     assert "Context:" in out["reason"]
     assert "Estimated cost" in out["reason"]

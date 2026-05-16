@@ -12,6 +12,8 @@
 
 LLM agents are powerful because they can read, run, fetch, and reason. GOT keeps that power controlled.
 
+![Prompt guard demo](assets/prompt-guard-demo.gif)
+
 ## Why GOT
 
 Agentic coding tools can burn through context in one bad move:
