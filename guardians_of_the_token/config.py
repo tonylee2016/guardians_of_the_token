@@ -17,6 +17,16 @@ DEFAULT_CONFIG = {
     "whitelist": [],
     "ignore": [],
     "prices": {},
+    "prompt_guard": {
+        "enabled": True,
+        "context_window_tokens": 200_000,
+        "block_context_pct": 0.30,
+        "very_low_similarity": None,
+        "unblock_prefix": "GOT_UNBLOCK",
+        "embedding_backend": "onnx",
+        "embedding_model": "all-MiniLM-L6-v2",
+        "fallback_user_prompts": 3,
+    },
 }
 
 USER_CONFIG = Path("~/.guardians.json").expanduser()

@@ -11,3 +11,7 @@ build/
 .env
 .claude
 .got/
+
+# Bundled embedding models — downloaded on first use, not committed to git.
+# Run `python -m guardians_of_the_token.embeddings --download` to fetch.
+guardians_of_the_token/models/*

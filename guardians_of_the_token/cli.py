@@ -67,6 +67,16 @@ CLAUDE_HOOKS_JSON = {
                 ],
             }
         ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 -m guardians_of_the_token.claude.prompt_guard",
+                    }
+                ],
+            }
+        ],
     }
 }
 
@@ -480,7 +490,7 @@ def client_descriptions() -> dict[str, str]:
     return {
         "codex_hooks": "Guards Codex shell file reads, URL fetches, and large Bash output.",
         "codex_mcp": "Registers got_file_size and safe bounded tools in the Codex app.",
-        "claude_code_hooks": "Guards Claude Code Read, Bash, WebFetch, and oversized output.",
+        "claude_code_hooks": "Guards Claude Code Read, Bash, WebFetch, oversized output, and unrelated prompts in large sessions.",
         "claude_desktop_mcp": "Registers GOT MCP tools for Claude Desktop project workflows.",
         TELEMETRY_OPTION: "Sends anonymous install/tool usage metadata only. No paths, URLs, prompts, content, commands, actions, risk, or token counts.",
     }

@@ -15,7 +15,10 @@ authors = [
 dependencies = [
   "fastapi",
   "httpx",
+  "numpy",
+  "onnxruntime",
   "pydantic",
+  "tokenizers",
   "uvicorn",
 ]
 
@@ -37,6 +40,7 @@ guardians-mcp = "guardians_of_the_token.mcp_server:main"
 guardians-proxy = "guardians_of_the_token.proxy:main"
 guardians-report = "guardians_of_the_token.cli:report"
 guardians-dashboard = "guardians_of_the_token.dashboard:main"
+guardians-download-models = "guardians_of_the_token.embeddings:main"
 
 [tool.setuptools.packages.find]
 include = ["guardians_of_the_token*"]
