@@ -15,6 +15,7 @@ from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import format_context_block
 from guardians_of_the_token.test_support import TEST_URL_SIZES
+from guardians_of_the_token.update import startup_auto_update
 from guardians_of_the_token.utils import count_tokens
 
 SERVER_INFO = {"name": "guardians-of-the-token", "version": __version__}
@@ -596,6 +597,8 @@ def dispatch(req: dict) -> Optional[dict]:
 
 
 def main():
+    startup_auto_update()
+
     for line in sys.stdin:
         line = line.strip()
         if not line:

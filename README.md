@@ -81,10 +81,14 @@ and presents a checkbox selector for individual integrations:
 - Codex app MCP
 - Claude Code hooks
 - Claude Desktop MCP
+- automatic updates
 
 Use Up/Down to move, Space to toggle, and Enter to install the selected
 integrations. Use `guardians-install --yes` to install into all detected
 integrations without prompting.
+
+Automatic updates are selected by default. They run only from safe session-start
+and update paths, never from hot tool hooks.
 
 If your Python environment blocks global installs, use a virtual environment or
 `pipx`:
@@ -269,7 +273,11 @@ Optional user config lives at `~/.guardians.json`:
   "max_output_tokens": 8000,
   "telemetry_enabled": false,
   "telemetry_host": "https://us.i.posthog.com",
-  "telemetry_api_key": "phc_..."
+  "telemetry_api_key": "phc_...",
+  "update_check_enabled": true,
+  "auto_update_enabled": true,
+  "auto_update_interval_hours": 24,
+  "auto_update_include_major": false
 }
 ```
 
@@ -305,6 +313,13 @@ prompts, file contents, command text, tool usage, risk levels, actions,
 geolocation, or token counts. The installer shows telemetry as a default-on
 selectable option and writes your choice to `~/.guardians.json`. You can
 override it with `GUARDIANS_TELEMETRY=0` or `GUARDIANS_TELEMETRY=1`.
+
+Manual update commands:
+
+```bash
+guardians update
+guardians update --check
+```
 
 Print a local savings report:
 

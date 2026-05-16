@@ -45,6 +45,16 @@ HOOKS_JSON = {
 
 CLAUDE_HOOKS_JSON = {
     "hooks": {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 -m guardians_of_the_token.claude.session_start",
+                    }
+                ],
+            }
+        ],
         "PreToolUse": [
             {
                 "matcher": "Bash|Read|WebFetch",
@@ -516,10 +526,11 @@ def show_install_banner() -> None:
 
 
 TELEMETRY_OPTION = "telemetry"
+AUTO_UPDATE_OPTION = "auto_update"
 
 
 def select_clients_interactive(integrations: list[str]) -> list[str]:
-    options = [*integrations, TELEMETRY_OPTION]
+    options = [*integrations, TELEMETRY_OPTION, AUTO_UPDATE_OPTION]
     if sys.stdin.isatty() and sys.stdout.isatty():
         return select_clients_tty(options, integrations)
     return select_clients_text(options, integrations)
@@ -532,6 +543,7 @@ def client_labels() -> dict[str, str]:
         "claude_code_hooks": "Claude Code hooks",
         "claude_desktop_mcp": "Claude Desktop MCP",
         TELEMETRY_OPTION: "Anonymous telemetry",
+        AUTO_UPDATE_OPTION: "Automatic updates",
     }
 
 
@@ -542,6 +554,7 @@ def client_descriptions() -> dict[str, str]:
         "claude_code_hooks": "Guards Claude Code Read, Bash, WebFetch, oversized output, and unrelated prompts in large sessions.",
         "claude_desktop_mcp": "Registers GOT MCP tools for Claude Desktop project workflows.",
         TELEMETRY_OPTION: "Sends anonymous install/tool usage metadata only. No paths, URLs, prompts, content, commands, actions, risk, or token counts.",
+        AUTO_UPDATE_OPTION: "Keeps Guardians updated from PyPI when Claude/Codex sessions start. Rate-limited and fail-open.",
     }
 
 
@@ -681,6 +694,12 @@ def configure_user_telemetry(enabled: bool) -> None:
         capture_install(config=existing)
 
 
+def configure_user_auto_update(enabled: bool) -> None:
+    from guardians_of_the_token.update import set_auto_update
+
+    set_auto_update(enabled)
+
+
 def install_auto():
     parser = argparse.ArgumentParser(
         description="Auto-install Guardians into the detected local LLM clients."
@@ -698,8 +717,9 @@ def install_auto():
             "No supported client home was detected. Expected ~/.codex and/or ~/.claude."
         )
     show_install_banner()
-    selected = [*integrations, TELEMETRY_OPTION] if args.yes else select_clients_interactive(integrations)
+    selected = [*integrations, TELEMETRY_OPTION, AUTO_UPDATE_OPTION] if args.yes else select_clients_interactive(integrations)
     configure_user_telemetry(TELEMETRY_OPTION in selected)
+    configure_user_auto_update(AUTO_UPDATE_OPTION in selected)
 
     installed = []
     if "codex_hooks" in selected:
@@ -842,6 +862,24 @@ def doctor():
     print(f"Project config: {'OK' if project_config.exists() else 'missing'} ({project_config})")
     print(f"Project event log: {'OK' if project_events.exists() else 'missing'} ({project_events})")
     print(f"Bypass file: {'present' if os.path.exists('/tmp/guardians_bypass') else 'not present'}")
+    from guardians_of_the_token.update import maybe_auto_update
+
+    update_result = maybe_auto_update(notify_only=True)
+    if update_result.message:
+        print(f"Updates: {update_result.message}")
+
+
+def update_cmd():
+    parser = argparse.ArgumentParser(description="Check for and apply Guardians package updates.")
+    parser.add_argument("--check", action="store_true", help="Only check for an update; do not install.")
+    args = parser.parse_args()
+
+    from guardians_of_the_token.update import maybe_auto_update
+
+    result = maybe_auto_update(force=True, notify_only=args.check)
+    print(result.message)
+    if result.status == "error":
+        raise SystemExit(1)
 
 
 def main():
@@ -860,6 +898,7 @@ def main():
     subcommands.add_parser("report", help="Print local token savings report.")
     subcommands.add_parser("dashboard", help="Run local dashboard.")
     subcommands.add_parser("doctor", help="Check installation status.")
+    subcommands.add_parser("update", help="Update Guardians from PyPI.")
     args, remaining = parser.parse_known_args()
 
     if args.command is None:
@@ -876,6 +915,7 @@ def main():
         "preflight": preflight,
         "report": report,
         "doctor": doctor,
+        "update": update_cmd,
     }
     if args.command == "dashboard":
         from guardians_of_the_token.dashboard import main as dashboard_main

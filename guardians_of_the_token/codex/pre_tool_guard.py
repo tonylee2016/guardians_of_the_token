@@ -15,6 +15,7 @@ from guardians_of_the_token.config import estimate_cost, load_config, policy_dec
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import agent_feedback, format_context_block
+from guardians_of_the_token.update import startup_auto_update
 
 BYPASS_FILE = "/tmp/guardians_bypass"
 
@@ -258,6 +259,8 @@ def guard_file(path: str, used_tokens: int, context_window: int, warn_tokens: in
 
 
 def main():
+    startup_auto_update()
+
     if is_bypass():
         return
 

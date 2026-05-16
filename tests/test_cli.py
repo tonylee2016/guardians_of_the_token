@@ -237,6 +237,7 @@ def test_install_auto_installs_selected_client_interactively(tmp_path, monkeypat
     assert "[ ] 2) Codex app MCP" in out
     assert "[ ] 3) Claude Code hooks" in out
     assert "[ ] 4) Anonymous telemetry" in out
+    assert "[x] 5) Automatic updates" in out
     assert "Installed Guardians into:" in out
     installed_section = out.split("Installed Guardians into:\n", 1)[1]
     assert "- OK Codex CLI hooks" in installed_section
@@ -246,6 +247,7 @@ def test_install_auto_installs_selected_client_interactively(tmp_path, monkeypat
     assert not (home / ".claude" / "settings.json").exists()
     user_config = json.loads((home / ".guardians.json").read_text())
     assert user_config["telemetry_enabled"] is False
+    assert user_config["auto_update_enabled"] is True
     assert user_config["telemetry_api_key"].startswith("phc_")
     assert fixture_marker.read_text() == "fixtures refreshed"
 
@@ -278,6 +280,7 @@ def test_install_auto_yes_installs_all_detected_clients(tmp_path, monkeypatch, c
     assert (home / ".claude" / "settings.json").exists()
     user_config = json.loads((home / ".guardians.json").read_text())
     assert user_config["telemetry_enabled"] is True
+    assert user_config["auto_update_enabled"] is True
     assert user_config["telemetry_api_key"].startswith("phc_")
 
 
