@@ -2,7 +2,7 @@
 
 [![PyPI package](https://img.shields.io/pypi/v/guardians-of-the-token?label=pypi%20package)](https://pypi.org/project/guardians-of-the-token/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/guardians-of-the-token?label=pypi%20downloads)](https://pypistats.org/packages/guardians-of-the-token)
-[![Supported Python version](https://img.shields.io/pypi/pyversions/guardians-of-the-token?label=supported%20python%20version)](https://pypi.org/project/guardians-of-the-token/)
+[![Supported Python version](https://img.shields.io/badge/python-%3E%3D3.9-blue?label=supported%20python%20version)](https://pypi.org/project/guardians-of-the-token/)
 [![License](https://img.shields.io/pypi/l/guardians-of-the-token?label=license)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/tonylee2016/guardians_of_the_token?style=social)](https://github.com/tonylee2016/guardians_of_the_token/stargazers)
 [![CI](https://img.shields.io/github/actions/workflow/status/tonylee2016/guardians_of_the_token/ci.yml?branch=main&label=ci)](https://github.com/tonylee2016/guardians_of_the_token/actions/workflows/ci.yml)
