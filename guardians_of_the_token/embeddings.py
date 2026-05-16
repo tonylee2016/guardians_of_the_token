@@ -131,18 +131,12 @@ def default_similarity_threshold(model_name: Optional[str]) -> float:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Embedding model utilities.")
-    parser.add_argument(
-        "--download",
-        action="store_true",
-        help="Fetch the bundled MiniLM ONNX + tokenizer into models/.",
+    parser = argparse.ArgumentParser(
+        description="Fetch the bundled MiniLM ONNX + tokenizer into models/."
     )
-    args = parser.parse_args()
-    if args.download:
-        path = ensure_model()
-        print(f"Model files ready in {path}")
-        return
-    parser.print_help()
+    parser.parse_args()
+    path = ensure_model()
+    print(f"Model files ready in {path}")
 
 
 if __name__ == "__main__":
