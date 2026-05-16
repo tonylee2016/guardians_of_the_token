@@ -71,6 +71,45 @@ def test_control_command_allowed(monkeypatch):
     _assert_allowed(prompt_guard.evaluate("/compact", "x", _config()), "allowlisted")
 
 
+def test_effective_window_snaps_up_to_one_million(monkeypatch):
+    # 410k live_tokens vs configured 200k window: the effective denominator
+    # must snap up to the next known window (1M) so context_pct is < 1.0.
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=410_000)
+    _stub_embed(monkeypatch, similarity=0.05)
+    decision = prompt_guard.evaluate(
+        "totally unrelated prompt about traveling somewhere far away",
+        "x",
+        _config(block_context_pct=0.30),
+    )
+    assert decision["action"] == "blocked"
+    assert decision["context_window"] == 1_000_000
+    assert decision["context_pct"] == pytest.approx(0.41)
+
+
+def test_effective_window_keeps_default_under_pressure(monkeypatch):
+    # 120k live_tokens fits inside the configured 200k window — no snap.
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=120_000)
+    _stub_embed(monkeypatch, similarity=0.05)
+    decision = prompt_guard.evaluate(
+        "totally unrelated prompt about traveling somewhere far away",
+        "x",
+        _config(block_context_pct=0.30),
+    )
+    assert decision["action"] == "blocked"
+    assert decision["context_window"] == 200_000
+
+
+def test_got_unblock_skill_invocation_allowed(monkeypatch):
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
+    _stub_embed(monkeypatch, similarity=0.0)
+    decision = prompt_guard.evaluate(
+        "/got-unblock plan a three-day trip to Tokyo",
+        "x",
+        _config(),
+    )
+    _assert_allowed(decision, "allowlisted")
+
+
 def test_short_continuation_allowed(monkeypatch):
     _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
     _stub_embed(monkeypatch, similarity=0.0)

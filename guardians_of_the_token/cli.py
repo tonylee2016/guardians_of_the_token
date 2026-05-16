@@ -405,6 +405,10 @@ def install_statusline() -> str:
     return "standalone"
 
 
+CLAUDE_SKILLS_DIR = Path("~/.claude/skills").expanduser()
+_BUNDLED_SKILLS_DIR = Path(__file__).parent / "claude" / "skills"
+
+
 def install_claude_global() -> Path:
     settings_path = claude_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -413,8 +417,28 @@ def install_claude_global() -> Path:
     existing["hooks"] = merged_hooks
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
     install_statusline()
+    install_claude_skills_global()
     _ensure_prompt_guard_model()
     return settings_path
+
+
+def install_claude_skills_global() -> list[Path]:
+    """Copy bundled Claude Code skills into ~/.claude/skills/."""
+    if not _BUNDLED_SKILLS_DIR.exists():
+        return []
+    installed: list[Path] = []
+    for skill_src in _BUNDLED_SKILLS_DIR.iterdir():
+        if not skill_src.is_dir():
+            continue
+        skill_md = skill_src / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        dest_dir = CLAUDE_SKILLS_DIR / skill_src.name
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_md = dest_dir / "SKILL.md"
+        dest_md.write_text(skill_md.read_text())
+        installed.append(dest_md)
+    return installed
 
 
 def _ensure_prompt_guard_model() -> None:

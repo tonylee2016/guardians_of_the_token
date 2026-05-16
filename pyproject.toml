@@ -46,4 +46,4 @@ guardians-download-models = "guardians_of_the_token.embeddings:main"
 include = ["guardians_of_the_token*"]
 
 [tool.setuptools.package-data]
-guardians_of_the_token = ["*.html"]
+guardians_of_the_token = ["*.html", "claude/skills/*/SKILL.md"]

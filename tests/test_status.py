@@ -142,6 +142,36 @@ def test_install_statusline_ccstatusline(tmp_path, monkeypatch):
     assert _ccstatusline_has_guardians(config)
 
 
+# --- install_claude_skills_global ---
+
+
+def test_install_claude_skills_copies_bundled_skill(tmp_path, monkeypatch):
+    from guardians_of_the_token.cli import install_claude_skills_global
+
+    dest = tmp_path / "skills"
+    monkeypatch.setattr("guardians_of_the_token.cli.CLAUDE_SKILLS_DIR", dest)
+
+    installed = install_claude_skills_global()
+    assert installed, "expected at least one skill to be installed"
+    unblock = dest / "got-unblock" / "SKILL.md"
+    assert unblock in installed
+    text = unblock.read_text()
+    assert "got-unblock" in text
+    assert "/got-unblock" in text
+
+
+def test_install_claude_skills_overwrites_existing(tmp_path, monkeypatch):
+    from guardians_of_the_token.cli import install_claude_skills_global
+
+    dest = tmp_path / "skills"
+    (dest / "got-unblock").mkdir(parents=True)
+    (dest / "got-unblock" / "SKILL.md").write_text("stale content")
+    monkeypatch.setattr("guardians_of_the_token.cli.CLAUDE_SKILLS_DIR", dest)
+
+    install_claude_skills_global()
+    assert "stale content" not in (dest / "got-unblock" / "SKILL.md").read_text()
+
+
 def test_install_statusline_ccstatusline_idempotent(tmp_path, monkeypatch):
     import guardians_of_the_token.cli as cli_mod
     ccstatus = tmp_path / "ccstatusline.json"

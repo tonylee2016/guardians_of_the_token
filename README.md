@@ -42,7 +42,7 @@ The goal is simple: prevent accidental context damage while keeping the agent mo
 
 | Client | Guarded paths |
 | --- | --- |
-| Claude Code | `Read`, `Bash`, `WebFetch`, oversized tool output |
+| Claude Code | `Read`, `Bash`, `WebFetch`, oversized tool output, **off-topic prompts in large sessions** |
 | Codex | risky `Bash` file dumps, URL fetches, oversized Bash output |
 | MCP clients | guarded source indexing and bounded file tools through `guardians-mcp` |
 | API workflows | experimental request-size proxy through `guardians-proxy` |
@@ -158,6 +158,57 @@ When a request is too large, GOT blocks it and returns a shared warning template
 - current context estimate when available
 - compaction risk when relevant
 - high-level next options
+
+## Prompt Guard (Claude Code only)
+
+Once a session crosses ~30% of the model's context window, GOT also checks
+each new prompt for topical drift. If the prompt looks unrelated to the
+ongoing conversation it blocks the submission before Claude processes it,
+saving you a round-trip's worth of input tokens.
+
+You'll see a block message like:
+
+```text
+🛡️ Guardians blocked this prompt before Claude processed it.
+
+Reason: this looks unrelated to the current large Claude session and would
+send a lot of unrelated context.
+Similarity: 0.07 (block threshold 0.10)
+Context: 168.9k / 200.0k tokens (84%)
+Estimated cost if sent: $0.5068
+
+To continue anyway, resend the same prompt prefixed with GOT_UNBLOCK.
+```
+
+To override a block, resend the prompt with the configured prefix:
+
+```text
+GOT_UNBLOCK <your prompt>
+```
+
+A small ONNX embedding model (~22 MB, `all-MiniLM-L6-v2`) is downloaded
+automatically the first time you run `guardians-install`. You can also fetch
+it manually:
+
+```bash
+guardians-download-models
+```
+
+Configure the guard in `~/.guardians.json`:
+
+```json
+{
+  "prompt_guard": {
+    "enabled": true,
+    "block_context_pct": 0.30,
+    "very_low_similarity": 0.10,
+    "unblock_prefix": "GOT_UNBLOCK"
+  }
+}
+```
+
+Set `"enabled": false` to disable it entirely. All decisions (allow and
+block) are logged to `.got/events.jsonl` with the gate that fired.
 
 ## Experimental Surfaces
 
