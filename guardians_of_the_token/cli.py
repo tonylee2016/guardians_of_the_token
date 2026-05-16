@@ -5,7 +5,7 @@ import sys
 import termios
 import tty
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from guardians_of_the_token.test_support import ensure_test_files
 from guardians_of_the_token.config import DEFAULT_CONFIG
@@ -405,8 +405,12 @@ def install_statusline() -> str:
     return "standalone"
 
 
-CLAUDE_SKILLS_DIR = Path("~/.claude/skills").expanduser()
 _BUNDLED_SKILLS_DIR = Path(__file__).parent / "claude" / "skills"
+CLAUDE_SKILLS_DIR: Optional[Path] = None
+
+
+def claude_skills_dir() -> Path:
+    return CLAUDE_SKILLS_DIR or Path.home() / ".claude" / "skills"
 
 
 def install_claude_global() -> Path:
@@ -433,7 +437,7 @@ def install_claude_skills_global() -> list[Path]:
         skill_md = skill_src / "SKILL.md"
         if not skill_md.exists():
             continue
-        dest_dir = CLAUDE_SKILLS_DIR / skill_src.name
+        dest_dir = claude_skills_dir() / skill_src.name
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_md = dest_dir / "SKILL.md"
         dest_md.write_text(skill_md.read_text())
