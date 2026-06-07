@@ -87,6 +87,16 @@ CLAUDE_HOOKS_JSON = {
                 ],
             }
         ],
+        "PreCompact": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 -m guardians_of_the_token.claude.pre_compact",
+                    }
+                ],
+            }
+        ],
     }
 }
 

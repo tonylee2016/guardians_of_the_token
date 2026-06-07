@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "guardians-of-the-token"
-version = "1.2.0"
+version = "1.3.0"
 description = "Guards LLM agents from accidental large-context file reads, web fetches, and tool output."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
   { name = "Guardians of the Token contributors" }

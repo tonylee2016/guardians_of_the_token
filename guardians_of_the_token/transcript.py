@@ -20,6 +20,21 @@ _HEAD_BYTES = 16_000
 _TAIL_BYTES = 128_000  # wider tail so we capture enough recent text-only assistant turns
 _ANCHOR_MAX_CHARS = 1200
 
+# Snap a pressure denominator up to the smallest known Claude context window
+# that contains the observed live_tokens. Without this, sessions running with
+# the 1m-context beta would show context_pct > 1.0 forever because the
+# configured default is 200_000. Shared by the prompt guard and the
+# project-state capture so both report the same percentage.
+KNOWN_CONTEXT_WINDOWS = (200_000, 1_000_000)
+
+
+def effective_context_window(configured: int, live_tokens: int) -> int:
+    target = max(int(configured), int(live_tokens))
+    for window in KNOWN_CONTEXT_WINDOWS:
+        if window >= target:
+            return window
+    return target
+
 
 @dataclass
 class TranscriptSignals:

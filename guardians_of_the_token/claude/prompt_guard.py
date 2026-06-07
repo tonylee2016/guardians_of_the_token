@@ -26,24 +26,12 @@ from guardians_of_the_token.embeddings import (
     default_similarity_threshold,
     embed,
 )
-from guardians_of_the_token.events import log_event
-from guardians_of_the_token.transcript import read_signals
+from guardians_of_the_token.events import event_base_dir, log_event
+from guardians_of_the_token.state import maybe_capture_on_pressure
+from guardians_of_the_token.transcript import effective_context_window, read_signals
 
-CONTROL_PREFIXES = ("/clear", "/compact", "/exit", "/help", "/got-unblock")
+CONTROL_PREFIXES = ("/clear", "/compact", "/exit", "/help", "/got-unblock", "/got-resume")
 
-# Snap the pressure denominator up to the smallest known Claude context
-# window that contains the observed live_tokens. Without this, sessions
-# running with the 1m-context beta would show context_pct > 1.0 forever
-# because the configured default is 200_000.
-_KNOWN_CONTEXT_WINDOWS = (200_000, 1_000_000)
-
-
-def _effective_context_window(configured: int, live_tokens: int) -> int:
-    target = max(int(configured), int(live_tokens))
-    for window in _KNOWN_CONTEXT_WINDOWS:
-        if window >= target:
-            return window
-    return target
 SHORT_CONTINUATIONS = {
     # affirmation / continuation
     "yes",
@@ -187,7 +175,7 @@ def evaluate(
     if signals.live_tokens is None:
         return _allow("no-usage", anchor_source=signals.anchor_source)
 
-    window = _effective_context_window(configured_window, signals.live_tokens)
+    window = effective_context_window(configured_window, signals.live_tokens)
     context_pct = signals.live_tokens / window
     base_extras = {
         "anchor_source": signals.anchor_source,
@@ -289,6 +277,17 @@ def main() -> None:
         },
         config=config,
         base_dir=cwd,
+    )
+
+    # Opportunistically refresh the project-state snapshot once the session is
+    # under context pressure, so a usable snapshot exists even if the session
+    # ends without ever triggering a compaction (which is what fires PreCompact).
+    maybe_capture_on_pressure(
+        transcript_path,
+        base_dir=event_base_dir(config, cwd),
+        live_tokens=decision.get("live_tokens"),
+        context_pct=decision.get("context_pct"),
+        config=config,
     )
 
     if decision["action"] == "blocked":

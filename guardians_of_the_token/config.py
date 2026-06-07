@@ -31,6 +31,15 @@ DEFAULT_CONFIG = {
         "embedding_model": "all-MiniLM-L6-v2",
         "fallback_user_prompts": 3,
     },
+    "project_state": {
+        "enabled": True,
+        "save_context_pct": 0.70,
+        "min_save_interval_seconds": 300,
+        "max_age_hours": 168,
+        "max_user_prompts": 6,
+        "max_files": 20,
+        "max_commands": 12,
+    },
 }
 
 USER_CONFIG = Path("~/.guardians.json").expanduser()
