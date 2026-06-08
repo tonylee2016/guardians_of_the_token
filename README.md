@@ -56,6 +56,19 @@ use `pipx install guardians-of-the-token` first.
 That's it — the guards are now active. The rest of this README is what they do
 and how to tune them.
 
+### Install as a Claude Code plugin
+
+GOT is also packaged as a Claude Code plugin. The plugin bundles the hooks,
+MCP server, and skills, and its `SessionStart` hook auto-installs the
+`guardians-of-the-token` PyPI package on first run (falling back to a manual
+`pip install` hint if your environment blocks automatic installs). Plugin
+skills are namespaced under the plugin name:
+
+- `/guardians-of-the-token:got-unblock <prompt>` — bypass the prompt guard for
+  one prompt.
+- `/guardians-of-the-token:got-resume` — resume from the saved project-state
+  snapshot.
+
 ## What you get
 
 | Client | What GOT guards |

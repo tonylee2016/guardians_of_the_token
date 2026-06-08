@@ -1,0 +1,6 @@
+{
+  "guardians-of-the-token": {
+    "type": "stdio",
+    "command": "guardians-mcp"
+  }
+}
