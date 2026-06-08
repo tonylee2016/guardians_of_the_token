@@ -5,6 +5,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.py\""
+          },
+          {
+            "type": "command",
             "command": "python3 -m guardians_of_the_token.claude.session_start"
           }
         ]
