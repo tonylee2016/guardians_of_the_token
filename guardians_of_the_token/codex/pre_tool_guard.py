@@ -40,6 +40,15 @@ MODEL_CONTEXT_WINDOWS = {
 FULL_FILE_COMMANDS = {"cat", "bat", "batcat", "nl", "more", "less"}
 FETCH_COMMANDS = {"curl", "wget", "fetch"}
 
+# Fetchers that print to stdout by default (so the bytes land in the agent's
+# context unless redirected). curl is the canonical one; wget/fetch save to a
+# file by default and are handled separately below.
+STDOUT_BY_DEFAULT = {"curl"}
+
+# Shell tokens that send a command's stdout somewhere other than the agent's
+# context. shlex keeps these as literal tokens, so we can scan for them.
+REDIRECT_TOKENS = {">", ">>", "|", "1>", "&>", "2>&1"}
+
 
 def read_tail(path: str, n: int) -> str:
     try:
@@ -133,12 +142,63 @@ def resolve_candidate_files(parts: list, cwd: str) -> list:
     return files
 
 
+def fetch_output_reaches_context(parts: list) -> bool:
+    """Return True only when a fetch command's response would be printed to
+    stdout and thus captured into the agent's context.
+
+    Downloads to a file (``curl -o``/``-O``, ``wget`` default, shell ``>``) never
+    enter the context, so estimating their token cost is meaningless and blocking
+    them is a false positive. We only guard URLs whose bytes actually reach the
+    model.
+    """
+    command = os.path.basename(parts[0])
+
+    # Any shell redirection or pipe sends stdout elsewhere (a file, another
+    # program), so the bytes never enter the context.
+    if any(token in REDIRECT_TOKENS for token in parts[1:]):
+        return False
+
+    args = parts[1:]
+
+    if command in STDOUT_BY_DEFAULT:
+        # curl prints to stdout unless an output flag is given.
+        for i, token in enumerate(args):
+            if token in {"-o", "--output", "--remote-name", "--remote-name-all"}:
+                return False
+            if token.startswith("--output="):
+                return False
+            # Short-flag cluster: -O (remote name, no arg) or -o (next arg is
+            # the file). Handles bundles like -sLO, -fsSLo.
+            if token.startswith("-") and not token.startswith("--"):
+                cluster = token[1:]
+                if "O" in cluster or "o" in cluster:
+                    return False
+        return True
+
+    # wget / fetch save to a file by default; only -O - / -qO- / --output-document=-
+    # send the body to stdout.
+    for i, token in enumerate(args):
+        if token in {"-O", "--output-document"} and i + 1 < len(args) and args[i + 1] == "-":
+            return True
+        if token.startswith("--output-document=") and token.endswith("=-"):
+            return True
+        # Combined short forms ending in stdout sentinel: -O-, -qO-, -O -.
+        if token.startswith("-O") and token.endswith("-") and len(token) > 2:
+            return True
+        if token.startswith("-q") and token.endswith("O-"):
+            return True
+    return False
+
+
 def resolve_candidate_urls(parts: list) -> list:
     if not parts:
         return []
 
     command = os.path.basename(parts[0])
     if command not in FETCH_COMMANDS:
+        return []
+
+    if not fetch_output_reaches_context(parts):
         return []
 
     return [
