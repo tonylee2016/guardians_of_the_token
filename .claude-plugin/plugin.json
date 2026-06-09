@@ -7,5 +7,7 @@
     "email": "tonylee2016@gmail.com"
   },
   "homepage": "https://github.com/tonylee2016/guardians_of_the_token",
-  "repository": "https://github.com/tonylee2016/guardians_of_the_token"
+  "repository": "https://github.com/tonylee2016/guardians_of_the_token",
+  "license": "MIT",
+  "keywords": ["context", "tokens", "guard", "hooks", "mcp", "token-budget"]
 }
