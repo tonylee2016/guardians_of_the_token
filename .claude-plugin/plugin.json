@@ -1,6 +1,6 @@
 {
   "name": "guardians-of-the-token",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Guards Claude Code from accidental large-context file reads, web fetches, and tool output. Estimates token cost before tools execute and blocks or warns when a single operation would consume a significant portion of your context window.",
   "author": {
     "name": "Tony Li",
