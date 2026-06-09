@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -92,6 +93,52 @@ def test_codex_pre_hook_blocks_large_url_with_shared_template():
     assert "Target: https://guardians-test/compact" in reason
     assert "- Inspect metadata" in reason
     assert "- Bypass once for the full response" in reason
+
+
+def test_codex_pre_hook_allows_download_to_file_without_blocking():
+    # The same URL blocks when curl prints it to stdout (see
+    # test_codex_pre_hook_blocks_large_url_with_shared_template), but a download
+    # to a file never enters the context, so it must not be blocked.
+    for command in (
+        "curl -o font.ttf https://guardians-test/compact",
+        "curl -O https://guardians-test/compact",
+        "curl -sLO https://guardians-test/compact",
+        "wget https://guardians-test/compact",
+        "curl https://guardians-test/compact > font.ttf",
+    ):
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "model": "gpt-5.5",
+            "transcript_path": "",
+        }
+        result = run_module("guardians_of_the_token.codex.pre_tool_guard", payload)
+        assert result.returncode == 0, command
+        assert result.stdout == "", command
+
+
+def test_fetch_output_reaches_context_matrix():
+    from guardians_of_the_token.codex.pre_tool_guard import fetch_output_reaches_context
+
+    reaches = [
+        "curl https://x/a.ttf",
+        "curl -sSL https://x/install.sh",
+        "wget -O - https://x/a.ttf",
+        "wget -qO- https://x/a.ttf",
+    ]
+    saves = [
+        "curl -o f.ttf https://x/a.ttf",
+        "curl -O https://x/a.ttf",
+        "curl --output f.ttf https://x/a.ttf",
+        "curl -fsSLo f.ttf https://x/a.ttf",
+        "wget https://x/a.ttf",
+        "wget -O f.ttf https://x/a.ttf",
+        "curl https://x/a.ttf | tar xz",
+    ]
+    for command in reaches:
+        assert fetch_output_reaches_context(shlex.split(command)) is True, command
+    for command in saves:
+        assert fetch_output_reaches_context(shlex.split(command)) is False, command
 
 
 def test_codex_post_hook_suppresses_large_output_with_shared_template():
