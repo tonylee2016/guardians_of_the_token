@@ -16,11 +16,15 @@ import sys
 
 from guardians_of_the_token.config import load_config
 from guardians_of_the_token.events import event_base_dir, log_event
+from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.state import capture
 from guardians_of_the_token.transcript import effective_context_window, read_signals
 
 
 def main() -> None:
+    if is_paused():
+        sys.exit(0)
+
     try:
         payload = json.loads(sys.stdin.read())
     except Exception:

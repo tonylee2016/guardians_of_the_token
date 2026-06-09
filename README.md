@@ -128,6 +128,25 @@ if you want to resume. To load it:
 Claude reads the snapshot and picks up where you left off. Nothing is injected
 unless you ask.
 
+## Pause the guards
+
+About to do something the guards would flag — read a big file, paste a large
+log, run a noisy command — and don't want to be interrupted each time? Pause
+every guard (Claude, Codex, any CLI) for a while:
+
+```bash
+guardians pause 1h     # pause for an hour
+guardians resume       # re-enable now
+```
+
+Durations accept seconds, minutes, hours, and days, plus combinations — `45s`,
+`30m`, `1h`, `1h30m`, `2d`. A bare number means minutes (`guardians pause 90`).
+In Claude Code you can do the same with `/got-pause 1h` (and `/got-pause off`).
+
+The pause is global and auto-expires (capped at 7 days), so a forgotten pause
+re-enables itself. While it's active every guard exits silently — no context
+blocks, no prompt guard, no output trimming, no snapshots.
+
 ## Configuration
 
 User config lives at `~/.guardians.json`; per-project overrides go in

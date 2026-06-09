@@ -892,6 +892,49 @@ def update_cmd():
         raise SystemExit(1)
 
 
+def pause_cmd():
+    parser = argparse.ArgumentParser(
+        description="Pause all Guardians guards (Claude, Codex, and any other CLI) for a while."
+    )
+    parser.add_argument(
+        "duration",
+        nargs="?",
+        default="1h",
+        help="How long to pause, e.g. 1h, 30m, 1h30m, 90s. A bare number is minutes. "
+        "Use 'off' to resume immediately. Default: 1h.",
+    )
+    args = parser.parse_args()
+
+    from guardians_of_the_token.pause import clear_pause, format_duration, parse_duration, set_pause
+
+    if args.duration.strip().lower() in {"off", "0", "resume", "stop"}:
+        cleared = clear_pause()
+        print("Guardians resumed." if cleared else "Guardians were not paused.")
+        return
+
+    try:
+        seconds = parse_duration(args.duration)
+    except ValueError:
+        print(f"Could not understand duration {args.duration!r}. Try 1h, 30m, or 1h30m.")
+        raise SystemExit(1)
+
+    set_pause(seconds)
+    print(
+        f"Guardians paused for {format_duration(seconds)} — guards are silent until then. "
+        "Run 'guardians resume' to re-enable now."
+    )
+
+
+def resume_cmd():
+    parser = argparse.ArgumentParser(description="Resume Guardians guards if paused.")
+    parser.parse_args()
+
+    from guardians_of_the_token.pause import clear_pause
+
+    cleared = clear_pause()
+    print("Guardians resumed." if cleared else "Guardians were not paused.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="guardians",
@@ -909,6 +952,8 @@ def main():
     subcommands.add_parser("dashboard", help="Run local dashboard.")
     subcommands.add_parser("doctor", help="Check installation status.")
     subcommands.add_parser("update", help="Update Guardians from PyPI.")
+    subcommands.add_parser("pause", help="Pause all guards for a while (e.g. 1h, 30m).")
+    subcommands.add_parser("resume", help="Resume guards if paused.")
     args, remaining = parser.parse_known_args()
 
     if args.command is None:
@@ -926,6 +971,8 @@ def main():
         "report": report,
         "doctor": doctor,
         "update": update_cmd,
+        "pause": pause_cmd,
+        "resume": resume_cmd,
     }
     if args.command == "dashboard":
         from guardians_of_the_token.dashboard import main as dashboard_main

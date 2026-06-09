@@ -11,6 +11,7 @@ import sys
 from guardians_of_the_token.config import estimate_cost, load_config
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.messages import format_output_block
+from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.test_support import get_test_output_tokens
 
 SOFT_CAP = 8_000  # tokens
@@ -38,6 +39,9 @@ def extract_text(response: object) -> str:
 
 
 def main():
+    if is_paused():
+        sys.exit(0)
+
     try:
         payload = json.loads(sys.stdin.read())
     except Exception:

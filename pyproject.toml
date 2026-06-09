@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "guardians-of-the-token"
-version = "1.3.0"
+version = "1.4.0"
 description = "Guards LLM agents from accidental large-context file reads, web fetches, and tool output."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,6 +41,8 @@ guardians-proxy = "guardians_of_the_token.proxy:main"
 guardians-report = "guardians_of_the_token.cli:report"
 guardians-dashboard = "guardians_of_the_token.dashboard:main"
 guardians-download-models = "guardians_of_the_token.embeddings:main"
+guardians-pause = "guardians_of_the_token.cli:pause_cmd"
+guardians-resume = "guardians_of_the_token.cli:resume_cmd"
 
 [tool.setuptools.packages.find]
 include = ["guardians_of_the_token*"]

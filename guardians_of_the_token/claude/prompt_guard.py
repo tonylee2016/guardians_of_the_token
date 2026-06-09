@@ -27,10 +27,11 @@ from guardians_of_the_token.embeddings import (
     embed,
 )
 from guardians_of_the_token.events import event_base_dir, log_event
+from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.state import maybe_capture_on_pressure
 from guardians_of_the_token.transcript import effective_context_window, read_signals
 
-CONTROL_PREFIXES = ("/clear", "/compact", "/exit", "/help", "/got-unblock", "/got-resume")
+CONTROL_PREFIXES = ("/clear", "/compact", "/exit", "/help", "/got-unblock", "/got-resume", "/got-pause")
 
 SHORT_CONTINUATIONS = {
     # affirmation / continuation
@@ -246,6 +247,9 @@ def _max_chunk_similarity(chunks: list, prompt: str, *, model_name: str) -> floa
 
 
 def main() -> None:
+    if is_paused():
+        sys.exit(0)
+
     try:
         payload = json.loads(sys.stdin.read())
     except Exception:

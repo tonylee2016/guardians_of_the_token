@@ -11,6 +11,7 @@ import sys
 from guardians_of_the_token.config import estimate_cost, load_config
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.messages import agent_feedback, format_output_block
+from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.test_support import get_test_output_tokens
 from guardians_of_the_token.update import startup_auto_update
 
@@ -42,6 +43,9 @@ def extract_text(response: object) -> str:
 
 
 def main():
+    if is_paused():
+        return
+
     startup_auto_update()
 
     try:

@@ -24,6 +24,7 @@ from guardians_of_the_token.config import estimate_cost, load_config, policy_dec
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
 from guardians_of_the_token.messages import format_context_block
+from guardians_of_the_token.pause import is_paused
 
 BYPASS_FILE = "/tmp/guardians_bypass"
 CAP_MODULE = "guardians_of_the_token.claude.cap_output"
@@ -255,6 +256,9 @@ def guard_bash(tool_input: dict):
 
 
 def main():
+    if is_paused():
+        sys.exit(0)
+
     if is_bypass():
         sys.exit(0)
 
