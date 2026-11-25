@@ -31,7 +31,17 @@ from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.state import maybe_capture_on_pressure
 from guardians_of_the_token.transcript import effective_context_window, read_signals
 
-CONTROL_PREFIXES = ("/clear", "/compact", "/exit", "/help", "/got-unblock", "/got-resume", "/got-pause")
+GOT_SKILLS = ("got-unblock", "got-resume", "got-pause")
+# When installed as a Claude Code plugin, skills are namespaced by plugin name.
+PLUGIN_NAMESPACE = "guardians-of-the-token"
+CONTROL_PREFIXES = (
+    "/clear",
+    "/compact",
+    "/exit",
+    "/help",
+    *(f"/{name}" for name in GOT_SKILLS),
+    *(f"/{PLUGIN_NAMESPACE}:{name}" for name in GOT_SKILLS),
+)
 
 SHORT_CONTINUATIONS = {
     # affirmation / continuation

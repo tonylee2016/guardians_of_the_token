@@ -1,0 +1,19 @@
+{
+  "name": "guardians-of-the-token",
+  "owner": {
+    "name": "Tony Li"
+  },
+  "metadata": {
+    "description": "Guardians of the Token: keep Claude Code sessions from wasting context."
+  },
+  "plugins": [
+    {
+      "name": "guardians-of-the-token",
+      "source": "./",
+      "description": "Blocks or warns before a Read, Bash, or WebFetch would flood the context window, guards off-topic prompts in large sessions, and saves a resume snapshot before compaction.",
+      "version": "1.4.0",
+      "category": "productivity",
+      "keywords": ["context", "tokens", "guard", "hooks", "token-budget"]
+    }
+  ]
+}

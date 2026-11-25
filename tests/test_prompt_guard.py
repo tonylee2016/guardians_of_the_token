@@ -110,6 +110,20 @@ def test_got_unblock_skill_invocation_allowed(monkeypatch):
     _assert_allowed(decision, "allowlisted")
 
 
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "/guardians-of-the-token:got-unblock plan a three-day trip to Tokyo",
+        "/guardians-of-the-token:got-resume",
+        "/guardians-of-the-token:got-pause 1h",
+    ],
+)
+def test_plugin_namespaced_skills_allowed(monkeypatch, prompt):
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
+    _stub_embed(monkeypatch, similarity=0.0)
+    _assert_allowed(prompt_guard.evaluate(prompt, "x", _config()), "allowlisted")
+
+
 def test_short_continuation_allowed(monkeypatch):
     _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
     _stub_embed(monkeypatch, similarity=0.0)

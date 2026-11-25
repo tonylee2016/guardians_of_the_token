@@ -58,16 +58,27 @@ and how to tune them.
 
 ### Install as a Claude Code plugin
 
-GOT is also packaged as a Claude Code plugin. The plugin bundles the hooks,
-MCP server, and skills, and its `SessionStart` hook auto-installs the
-`guardians-of-the-token` PyPI package on first run (falling back to a manual
-`pip install` hint if your environment blocks automatic installs). Plugin
-skills are namespaced under the plugin name:
+GOT is also packaged as a Claude Code plugin. In Claude Code, run:
+
+```text
+/plugin marketplace add tonylee2016/guardians_of_the_token
+/plugin install guardians-of-the-token@guardians-of-the-token
+```
+
+The plugin bundles the hooks, MCP server, and skills. If the
+`guardians-of-the-token` package isn't already installed, its `SessionStart`
+hook installs it into a private venv at `~/.guardians/plugin-venv` on first run
+(Python 3.10+ required). The guards switch on once that finishes, so the very
+first session may run unguarded. Use either the plugin or `guardians-install`,
+not both, or every hook runs twice.
+
+Plugin skills are namespaced under the plugin name:
 
 - `/guardians-of-the-token:got-unblock <prompt>` — bypass the prompt guard for
   one prompt.
 - `/guardians-of-the-token:got-resume` — resume from the saved project-state
   snapshot.
+- `/guardians-of-the-token:got-pause <duration>` — pause all guards for a while.
 
 ## What you get
 

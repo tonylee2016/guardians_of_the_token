@@ -24,6 +24,10 @@ time. The pause is global: it quiets every guard for this CLI and any other
    guardians pause off            # resume immediately (or: guardians resume)
    ```
 
+   If `guardians` is not on PATH (for example when the Claude Code plugin
+   installed the package into its private venv), use
+   `~/.guardians/plugin-venv/bin/guardians pause <duration>` instead.
+
 3. Tell the user it worked and when the guards come back — for example
    "Guards paused for 1h; run `/got-pause off` to re-enable sooner."
 
