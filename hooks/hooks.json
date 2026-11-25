@@ -5,11 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.py\"",
+            "timeout": 600
           },
           {
             "type": "command",
-            "command": "python3 -m guardians_of_the_token.claude.session_start"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/run.py\" guardians_of_the_token.claude.session_start"
           }
         ]
       }
@@ -20,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m guardians_of_the_token.claude.pre_tool_guard"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/run.py\" guardians_of_the_token.claude.pre_tool_guard"
           }
         ]
       }
@@ -31,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m guardians_of_the_token.claude.post_tool_guard"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/run.py\" guardians_of_the_token.claude.post_tool_guard"
           }
         ]
       }
@@ -41,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m guardians_of_the_token.claude.prompt_guard"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/run.py\" guardians_of_the_token.claude.prompt_guard"
           }
         ]
       }
@@ -51,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m guardians_of_the_token.claude.pre_compact"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/run.py\" guardians_of_the_token.claude.pre_compact"
           }
         ]
       }

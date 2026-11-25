@@ -1,57 +1,61 @@
 #!/usr/bin/env python3
-"""Ensure the guardians-of-the-token PyPI package is installed.
+"""Ensure the guardians-of-the-token PyPI package is available to the plugin.
 
-This runs as the first SessionStart hook so the plugin works for users who
-installed it from the marketplace without first running
-``pip install guardians-of-the-token``. The plugin's hooks and MCP server all
-call into the ``guardians_of_the_token`` package, so it must be importable.
+Runs on SessionStart so the plugin works for users who installed it from the
+marketplace without first running ``pip install guardians-of-the-token``.
 
-Fail-open: if installation can't happen (no network, externally managed
-environment, etc.) we emit a one-line hint and exit 0 so the session still
-starts. The other hooks degrade gracefully when the package is missing.
+If the package is already importable (system Python or the plugin venv) this
+is a no-op. Otherwise it creates a private venv at ``~/.guardians/plugin-venv``
+(override with ``GUARDIANS_PLUGIN_VENV``) and installs the package there, which
+avoids PEP 668 "externally managed environment" errors and PATH issues.
+
+Fail-open: on any failure, print a one-line hint and exit 0.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 import sys
+from pathlib import Path
 
-PACKAGE = "guardians-of-the-token"
-IMPORT_NAME = "guardians_of_the_token"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-
-def _installed() -> bool:
-    return importlib.util.find_spec(IMPORT_NAME) is not None
+from _env import PACKAGE, find_python, venv_dir, venv_python  # noqa: E402
 
 
-def _pip_install() -> bool:
-    """Try a normal install, then fall back to --user. Best-effort."""
-    base = [sys.executable, "-m", "pip", "install", "--quiet"]
-    for extra in ([], ["--user"]):
-        try:
+def _install_venv() -> bool:
+    if sys.version_info < (3, 10):
+        return False
+    try:
+        if not venv_python().exists():
+            venv_dir().parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
-                base + extra + [PACKAGE],
+                [sys.executable, "-m", "venv", str(venv_dir())],
                 check=True,
                 capture_output=True,
-                timeout=300,
+                timeout=120,
             )
-            return True
-        except Exception:
-            continue
-    return False
+        subprocess.run(
+            [str(venv_python()), "-m", "pip", "install", "--quiet", "--upgrade", PACKAGE],
+            check=True,
+            capture_output=True,
+            timeout=540,
+        )
+        return True
+    except Exception:
+        return False
 
 
 def main() -> int:
-    if _installed():
+    if find_python() is not None:
         return 0
-    if _pip_install() and _installed():
-        sys.stderr.write(f"Installed {PACKAGE} for the Guardians of the Token plugin.\n")
+    if _install_venv() and find_python() is not None:
+        sys.stderr.write(f"Guardians of the Token: installed {PACKAGE} into {venv_dir()}.\n")
         return 0
-    sys.stderr.write(
-        f"Guardians of the Token: could not auto-install {PACKAGE}. "
-        f"Run `pip install {PACKAGE}` (or `pipx install {PACKAGE}`) to enable the guards.\n"
-    )
+    hint = f"`pipx install {PACKAGE}` or `pip install {PACKAGE}`"
+    if sys.version_info < (3, 10):
+        hint = f"Python 3.10+ is required (python3 is {sys.version.split()[0]}); then {hint}"
+    sys.stderr.write(f"Guardians of the Token: could not auto-install {PACKAGE}. Run {hint} to enable the guards.\n")
     return 0
 
 

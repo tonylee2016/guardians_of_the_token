@@ -1,6 +1,10 @@
 {
   "guardians-of-the-token": {
     "type": "stdio",
-    "command": "guardians-mcp"
+    "command": "python3",
+    "args": [
+      "${CLAUDE_PLUGIN_ROOT}/scripts/run.py",
+      "guardians_of_the_token.mcp_server"
+    ]
   }
 }
