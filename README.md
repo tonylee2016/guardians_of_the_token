@@ -7,7 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/tonylee2016/guardians_of_the_token?style=social)](https://github.com/tonylee2016/guardians_of_the_token/stargazers)
 [![CI](https://img.shields.io/github/actions/workflow/status/tonylee2016/guardians_of_the_token/ci.yml?branch=main&label=ci)](https://github.com/tonylee2016/guardians_of_the_token/actions/workflows/ci.yml)
 
-![GOT hero image](assets/got-hero-cartoon.png)
+![GOT hero image](assets/got-hero-cartoon.jpg)
 
 **Guardians of the Token** keeps agentic coding sessions from wasting context.
 It runs locally and watches the moves that quietly blow up your context window —
@@ -31,15 +31,19 @@ GOT turns those into a clear pause instead of a silent loss:
 🛡️ Guardians of the Token blocked this command.
 Target: /tmp/big.log
 Estimate: ~200,000 tokens (50% of the 400,000-token window)
-Next options:
-- Inspect the beginning / end
-- Search for a term
-- Summarize a bounded section
-- Bypass once for the full file
+Next options (reply with a number):
+1. Inspect the beginning
+2. Inspect the end
+3. Search for a term
+4. Summarize a bounded section
+5. Bypass once for the full file
 ```
 
-Everything runs locally with lightweight token estimates — no data leaves your
-machine.
+Reply with a number and Claude carries out that option.
+
+Guarding runs locally with lightweight token estimates. Your files, prompts,
+and commands never leave your machine (see
+[What GOT runs and sends](#what-got-runs-and-sends)).
 
 ## Install
 
@@ -65,12 +69,16 @@ GOT is also packaged as a Claude Code plugin. In Claude Code, run:
 /plugin install guardians-of-the-token@guardians-of-the-token
 ```
 
-The plugin bundles the hooks, MCP server, and skills. If the
-`guardians-of-the-token` package isn't already installed, its `SessionStart`
-hook installs it into a private venv at `~/.guardians/plugin-venv` on first run
-(Python 3.10+ required). The guards switch on once that finishes, so the very
-first session may run unguarded. Use either the plugin or `guardians-install`,
-not both, or every hook runs twice.
+The plugin bundles the hooks, MCP server, and skills. It needs Python 3.10+ as
+`python3`. If the `guardians-of-the-token` package isn't already installed, the
+first session shows a notice and installs it in the background into a private
+venv at `~/.guardians/plugin-venv`, pinned to the plugin's version. It never
+touches your system Python. The guards switch on by themselves when the install
+finishes, usually within a minute. If it fails, the next session tells you and
+points to `~/.guardians/plugin-install.log`.
+
+Use either the plugin or `guardians-install`, not both, or every hook runs
+twice.
 
 Plugin skills are namespaced under the plugin name:
 
@@ -95,7 +103,8 @@ from file size, URL metadata, or command shape. If it's too large it blocks the
 call and suggests bounded alternatives (inspect, search, summarize). Oversized
 command output is trimmed before it reaches the model.
 
-Need the full payload anyway? Bypass once:
+Need the full payload anyway? Reply with the "Bypass once" option and Claude
+retries it once. You can also do it yourself:
 
 ```bash
 touch /tmp/guardians_bypass
@@ -209,6 +218,33 @@ Keep GOT current:
 guardians update          # update from PyPI
 guardians update --check  # check only
 ```
+
+## What GOT runs and sends
+
+Everything below is local unless it names a host.
+
+- **Hooks** (Claude Code plugin or `guardians-install`): Python scripts that run
+  before `Read`, `Bash`, and `WebFetch`, after `WebFetch`/`WebSearch`, on each
+  prompt, on session start, and before compaction. They read the session
+  transcript and file sizes on your machine, and write events to
+  `.got/events.jsonl` and snapshots to `.got/project_state.*` in your project.
+- **WebFetch guard**: sends a `HEAD` request to the URL Claude was about to
+  fetch, to read its size. No other data is sent.
+- **Plugin install** (plugin only): on first run, downloads
+  `guardians-of-the-token` and its dependencies from PyPI (`pypi.org`) into
+  `~/.guardians/plugin-venv`.
+- **Prompt-guard model**: downloads a ~22 MB embedding model
+  (`Xenova/all-MiniLM-L6-v2`) from Hugging Face (`huggingface.co`) once, during
+  install, and runs it locally.
+- **Updates**: off by default. `guardians update` checks `pypi.org` when you
+  run it. If you set `"auto_update_enabled": true`, the session-start hook
+  checks `pypi.org` at most once a day and upgrades within the same major
+  version.
+- **Telemetry**: off by default. If you opt in, it sends one anonymous install
+  event (install ID, version, Python version, OS) to PostHog
+  (`us.i.posthog.com`). It never sends paths, prompts, content, commands, or
+  token counts.
+- **MCP server** (`guardians-mcp`): local stdio server, no network listener.
 
 ## Advanced
 

@@ -88,6 +88,8 @@ SHORT_CONTINUATIONS = {
     "less",
     "shorter",
     "longer",
+    # numbered replies to a Guardians block ("Next options (reply with a number)")
+    *(str(n) for n in range(1, 10)),
 }
 
 
@@ -147,9 +149,11 @@ def _block_reason(
         f"Context: {_format_tokens(live_tokens)} / {_format_tokens(window)} "
         f"tokens ({ctx_pct:.0f}%)\n"
         f"Estimated cost if sent: ${estimated_cost:.4f}\n\n"
-        "To continue anyway, resend the prompt as either:\n"
-        "  /got-unblock <your prompt>\n"
-        f"  {prefix} <your prompt>"
+        "What you can do:\n"
+        "- New topic? Run /clear, then send it again. A fresh session costs far "
+        "less than carrying this one.\n"
+        f"- Send it here anyway: resend it starting with {prefix} "
+        "(or use /got-unblock <your prompt>)."
     )
 
 

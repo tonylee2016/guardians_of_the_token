@@ -18,9 +18,11 @@ def test_file_context_block_uses_shared_bulleted_template():
     assert "Target: /tmp/large.txt" in message
     assert "Estimate: ~200,000 tokens (50% of the 400,000-token window on gpt-5.5)" in message
     assert "Current context: ~10,000 tokens (2%)" in message
-    assert "- Inspect the beginning" in message
-    assert "- Bypass once for the full file" in message
+    assert "1. Inspect the beginning" in message
+    assert "5. Bypass once for the full file" in message
     assert "Preserve the first line exactly as written" in message
+    assert "Next options (reply with a number):" in message
+    assert "5 = run `touch /tmp/guardians_bypass`" in message
     assert "sed -n" not in message
     assert "tail -n" not in message
 
@@ -41,8 +43,8 @@ def test_url_context_block_marks_compaction_risk():
     assert message.startswith("🛡️ Guardians of the Token blocked this request.")
     assert "After fetch: ~200,000 tokens (100%)" in message
     assert "Risk: likely context compaction." in message
-    assert "- Inspect metadata" in message
-    assert "- Bypass once for the full response" in message
+    assert "1. Inspect metadata" in message
+    assert "5. Bypass once for the full response" in message
 
 
 def test_output_block_uses_shared_bulleted_template():
@@ -51,5 +53,5 @@ def test_output_block_uses_shared_bulleted_template():
     assert message.startswith("🛡️ Guardians of the Token suppressed large Bash output.")
     assert "Estimate: ~99,999 tokens" in message
     assert "Limit: 8,000-token soft cap" in message
-    assert "- Inspect a smaller slice" in message
-    assert "- Bypass once for the full output" in message
+    assert "1. Inspect a smaller slice" in message
+    assert "4. Bypass once for the full output" in message
