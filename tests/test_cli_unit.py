@@ -134,6 +134,30 @@ def test_select_clients_interactive_uses_tty_selector(monkeypatch):
     assert cli.select_clients_interactive(["codex_hooks"]) == ["picked"]
 
 
+def test_select_clients_interactive_without_termios_uses_text(monkeypatch):
+    monkeypatch.setattr(sys, "stdin", Tty())
+    monkeypatch.setattr(sys, "stdout", Tty())
+    monkeypatch.setattr(cli, "termios", None)
+    monkeypatch.setattr(cli, "select_clients_tty", lambda *a: pytest.fail("tty selector used without termios"))
+    monkeypatch.setattr(cli, "select_clients_text", lambda options, integrations: ["typed"])
+    assert cli.select_clients_interactive(["codex_hooks"]) == ["typed"]
+
+
+def test_cli_imports_without_termios(monkeypatch):
+    """On Windows termios/tty don't exist; the module must still import."""
+    import importlib
+
+    monkeypatch.setitem(sys.modules, "termios", None)
+    monkeypatch.setitem(sys.modules, "tty", None)
+    try:
+        reloaded = importlib.reload(cli)
+        assert reloaded.termios is None and reloaded.tty is None
+    finally:
+        monkeypatch.undo()
+        importlib.reload(cli)
+    assert cli.termios is not None
+
+
 def test_select_clients_text_requires_a_choice_and_rejects_bad_input(monkeypatch, capsys):
     answers = iter(["1,2,3,4", "", "x", "9", "1", ""])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
