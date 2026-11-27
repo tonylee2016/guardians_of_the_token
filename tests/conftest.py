@@ -23,6 +23,9 @@ def _isolate_user_state(monkeypatch, tmp_path_factory):
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("GUARDIANS_PAUSE_FILE", str(home / ".got" / "pause_until"))
+    # Config-dir variables would point the installer at the real machine's folders.
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
     monkeypatch.setattr("guardians_of_the_token.config.USER_CONFIG", home / ".guardians.json")
     monkeypatch.setattr("guardians_of_the_token.telemetry.TELEMETRY_ID", home / ".guardians" / "telemetry_id")
     return home
@@ -36,3 +39,9 @@ def _no_pypi_network(monkeypatch):
         raise OSError("network disabled in tests")
 
     monkeypatch.setattr("guardians_of_the_token.update.latest_pypi_version", offline)
+
+
+@pytest.fixture(autouse=True)
+def _no_claude_cli(monkeypatch):
+    """Installer detection must not depend on whether this machine has the claude CLI."""
+    monkeypatch.setattr("guardians_of_the_token.cli.claude_cli", lambda: None)

@@ -81,7 +81,7 @@ def test_install_codex_refuses_config_it_cannot_update(monkeypatch, tmp_path):
 def test_install_claude_workspace_and_existing(monkeypatch, tmp_path, capsys):
     argv(monkeypatch, str(tmp_path))
     cli.install_claude()
-    assert json.loads((tmp_path / ".claude" / "settings.json").read_text()) == cli.CLAUDE_HOOKS_JSON
+    assert json.loads((tmp_path / ".claude" / "settings.json").read_text()) == {"hooks": cli.with_python(cli.CLAUDE_HOOKS_JSON["hooks"])}
     assert "Claude Code hooks in" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="--force"):
         cli.install_claude()

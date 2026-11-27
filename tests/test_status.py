@@ -3,7 +3,7 @@ import json
 import pytest
 
 from guardians_of_the_token.cli import (
-    GUARDIANS_STATUS_COMMAND,
+    status_command,
     _ccstatusline_add_guardians,
     _ccstatusline_has_guardians,
     install_statusline,
@@ -88,7 +88,7 @@ def test_ccstatusline_add_guardians_appends_separator_and_widget():
     last_two = config["lines"][0][-2:]
     assert last_two[0]["type"] == "separator"
     assert last_two[1]["type"] == "custom-command"
-    assert last_two[1]["commandPath"] == GUARDIANS_STATUS_COMMAND
+    assert last_two[1]["commandPath"] == status_command()
     assert last_two[1]["color"] == "green"
 
 
@@ -115,7 +115,7 @@ def test_install_statusline_standalone(tmp_path, monkeypatch):
     result = install_statusline()
     assert result == "standalone"
     data = json.loads(settings.read_text())
-    assert data["statusLine"]["command"] == GUARDIANS_STATUS_COMMAND
+    assert data["statusLine"]["command"] == status_command()
 
 
 def test_install_statusline_standalone_exists_skips(tmp_path, monkeypatch):
@@ -183,3 +183,27 @@ def test_install_statusline_ccstatusline_idempotent(tmp_path, monkeypatch):
     install_statusline()
     config_after_second = json.loads(ccstatus.read_text())
     assert config_after_first == config_after_second
+
+
+def test_install_statusline_refreshes_old_python3_commands(tmp_path, monkeypatch):
+    import guardians_of_the_token.cli as cli_mod
+    old = "python3 -m guardians_of_the_token.status"
+    ccstatus = tmp_path / "ccstatusline.json"
+    ccstatus.write_text(json.dumps({"lines": [[{"id": "1", "type": "custom-command", "commandPath": old}]]}))
+    monkeypatch.setattr(cli_mod, "CCSTATUSLINE_CONFIG", ccstatus)
+
+    install_statusline()
+
+    widgets = json.loads(ccstatus.read_text())["lines"][0]
+    assert [w["commandPath"] for w in widgets] == [status_command()]
+
+
+def test_install_statusline_refreshes_old_standalone_command(tmp_path, monkeypatch):
+    import guardians_of_the_token.cli as cli_mod
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"statusLine": {"command": "python3 -m guardians_of_the_token.status"}}))
+    monkeypatch.setattr(cli_mod, "CCSTATUSLINE_CONFIG", tmp_path / "missing.json")
+    monkeypatch.setattr(cli_mod, "claude_settings_path", lambda: settings)
+
+    assert install_statusline() == "standalone"
+    assert json.loads(settings.read_text())["statusLine"]["command"] == status_command()
