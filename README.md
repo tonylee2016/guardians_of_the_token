@@ -25,21 +25,18 @@ One bad move can burn your whole context window:
 - fetching a large page directly into the model
 - sending an off-topic prompt into an already-huge session
 
-GOT turns those into a clear pause instead of a silent loss:
+GOT turns those into a clear choice instead of a silent loss. In Claude Code,
+a big read or fetch waits in Claude Code's own Yes/No permission prompt, with
+GOT's estimate as the reason:
 
 ```text
-🛡️ Guardians of the Token blocked this command.
-Target: /tmp/big.log
-Estimate: ~200,000 tokens (50% of the 400,000-token window)
-Next options (reply with a number):
-1. Inspect the beginning
-2. Inspect the end
-3. Search for a term
-4. Summarize a bounded section
-5. Bypass once for the full file
+🛡️ Guardians of the Token: large file (~300,000 tokens, 30% of the window, ~$0.90).
+Context 20% → 50%.
+Yes loads it in full. No lets Claude suggest a smaller read.
 ```
 
-Reply with a number and Claude carries out that option.
+Pick **Yes** to load it once. Pick **No** and Claude offers a smaller move: the
+beginning, the end, a search, or a bounded summary.
 
 Guarding runs locally with lightweight token estimates. Your files, prompts,
 and commands never leave your machine (see
@@ -92,7 +89,8 @@ touches your system Python. The guards switch on by themselves when the install
 finishes, usually within a minute. If it fails, the next session tells you and
 points to `~/.guardians/plugin-install.log`.
 
-Plugin skills are namespaced under the plugin name:
+Plugin skills are namespaced under the plugin name (a hooks-only install
+names them `/got-unblock`, `/got-resume`, and `/got-pause`):
 
 - `/guardians-of-the-token:got-unblock <prompt>` — bypass the prompt guard for
   one prompt.
@@ -110,13 +108,23 @@ Plugin skills are namespaced under the plugin name:
 
 ### 1. Context guard
 
-Before a risky `Read`, `Bash`, or `WebFetch` runs, GOT estimates its token cost
-from file size, URL metadata, or command shape. If it's too large it blocks the
-call and suggests bounded alternatives (inspect, search, summarize). Oversized
-command output is trimmed before it reaches the model.
+Before a big `Read` or `WebFetch` runs, GOT estimates its token cost from the
+file size or the URL's `HEAD` metadata. Over `warn_threshold_pct` of the window
+(default 20%):
 
-Need the full payload anyway? Reply with the "Bypass once" option and Claude
-retries it once. You can also do it yourself:
+- **Claude Code** shows its Yes/No permission prompt with GOT's estimate. Yes
+  loads it once; No has Claude offer a bounded alternative instead. With
+  permissions bypassed, or `"confirm_with_prompt": false`, GOT blocks the call
+  and lists numbered options instead.
+- **Codex CLI** has no prompt to hand off to, so GOT denies shell commands that
+  would dump a big file or URL (`cat`, `less`, `curl`, …) and lists numbered
+  options. Reply with a number and Codex carries it out.
+
+Oversized output is caught too: Claude Code flags large `WebFetch`/`WebSearch`
+results, and Codex suppresses large `Bash` output.
+
+Wherever GOT lists numbered options, the last one is "Bypass once". You can
+also do it yourself:
 
 ```bash
 touch /tmp/guardians_bypass
@@ -136,10 +144,14 @@ Similarity: 0.07 (block threshold 0.10)
 Context: 412.6k / 1.0M tokens (41%)
 Estimated cost if sent: $1.2378
 
-To continue anyway, resend the prompt prefixed with GOT_UNBLOCK.
+What you can do:
+- New topic → run /clear, then send it again.
+- Keep it here → send it again starting with GOT_UNBLOCK
 ```
 
-To send it anyway, resend prefixed with `GOT_UNBLOCK` (or run `/got-unblock`).
+Prompt hooks can only show text, so there are no buttons here. In the Claude
+app, **Edit prompt** puts your text back so you can add the prefix. You can
+also run `/got-unblock <your prompt>`.
 A small ONNX model (~22 MB) is fetched automatically on install; re-fetch it
 anytime with `guardians-download-models`.
 
@@ -187,6 +199,7 @@ User config lives at `~/.guardians.json`; per-project overrides go in
 ```json
 {
   "warn_threshold_pct": 20,
+  "confirm_with_prompt": true,
   "max_output_tokens": 8000,
   "telemetry_enabled": false,
   "prompt_guard": {
@@ -252,6 +265,9 @@ Everything below is local unless it names a host.
   `.got/events.jsonl` and snapshots to `.got/project_state.*` in your project.
 - **WebFetch guard**: sends a `HEAD` request to the URL Claude was about to
   fetch, to read its size. No other data is sent.
+- **`guardians-install`**: to set up the Claude Code plugin, runs
+  `claude plugin marketplace add` and `claude plugin install`, which fetch the
+  plugin from GitHub (`github.com/tonylee2016/guardians_of_the_token`).
 - **Plugin install** (plugin only): on first run, downloads
   `guardians-of-the-token` and its dependencies from PyPI (`pypi.org`) into
   `~/.guardians/plugin-venv`.
@@ -266,7 +282,8 @@ Everything below is local unless it names a host.
   event (install ID, version, Python version, OS) to PostHog
   (`us.i.posthog.com`). It never sends paths, prompts, content, commands, or
   token counts.
-- **MCP server** (`guardians-mcp`): local stdio server, no network listener.
+- **MCP server** (`guardians_of_the_token.mcp_server`, also `guardians-mcp`):
+  local stdio server, no network listener.
 
 ## Advanced
 
