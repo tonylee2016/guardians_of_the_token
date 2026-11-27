@@ -11,6 +11,9 @@ DEFAULT_CONFIG = {
     "warn_threshold_pct": 20,
     # Pin the context window (tokens) instead of deriving it from the model.
     "context_window": None,
+    # Claude Code: large Read/WebFetch calls get the Yes/No permission prompt
+    # instead of a hard block. False restores the block.
+    "confirm_with_prompt": True,
     "max_output_tokens": 8_000,
     "default_input_price_per_million": 3.0,
     "telemetry_enabled": False,

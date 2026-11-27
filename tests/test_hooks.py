@@ -157,13 +157,47 @@ def test_codex_post_hook_suppresses_large_output_with_shared_template():
     assert "1. Inspect a smaller slice" in response["reason"]
 
 
-def test_claude_pre_hook_blocks_read_with_shared_template(tmp_path):
+def _permission_ask(result):
+    assert result.returncode == 0
+    assert result.stderr == ""
+    out = json.loads(result.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse"
+    assert out["permissionDecision"] == "ask"
+    return out
+
+
+def test_claude_pre_hook_asks_permission_for_large_read(tmp_path):
     target = tmp_path / "large.txt"
     target.write_text("small")
     payload = {
         "tool_name": "Read",
         "tool_input": {"file_path": str(target)},
         "transcript_path": "",
+        "permission_mode": "default",
+    }
+
+    result = run_module(
+        "guardians_of_the_token.claude.pre_tool_guard",
+        payload,
+        {"GUARDIANS_TEST_SIZE": "800000"},
+    )
+
+    out = _permission_ask(result)
+    assert out["permissionDecisionReason"].startswith("🛡️ Guardians of the Token: large file (~")
+    assert "Yes loads it in full. No lets Claude suggest a smaller read." in out["permissionDecisionReason"]
+    assert str(target) in out["additionalContext"]
+    assert "1. Inspect the beginning" in out["additionalContext"]
+    assert "Bypass" not in out["additionalContext"]
+
+
+def test_claude_pre_hook_blocks_read_when_permissions_are_bypassed(tmp_path):
+    target = tmp_path / "large.txt"
+    target.write_text("small")
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(target)},
+        "transcript_path": "",
+        "permission_mode": "bypassPermissions",
     }
 
     result = run_module(
@@ -179,14 +213,36 @@ def test_claude_pre_hook_blocks_read_with_shared_template(tmp_path):
     assert "5. Bypass once for the full file" in result.stderr
 
 
-def test_claude_pre_hook_blocks_webfetch_with_shared_template():
+def test_claude_pre_hook_asks_permission_for_large_webfetch():
     payload = {
         "tool_name": "WebFetch",
         "tool_input": {"url": "https://guardians-test/compact"},
         "transcript_path": "",
     }
 
-    result = run_module("guardians_of_the_token.claude.pre_tool_guard", payload)
+    out = _permission_ask(run_module("guardians_of_the_token.claude.pre_tool_guard", payload))
+
+    assert out["permissionDecisionReason"].startswith("🛡️ Guardians of the Token: large page (~")
+    assert "likely to trigger compaction" in out["permissionDecisionReason"]
+    assert "No lets Claude suggest a smaller fetch." in out["permissionDecisionReason"]
+    assert "https://guardians-test/compact" in out["additionalContext"]
+    assert "1. Inspect metadata" in out["additionalContext"]
+
+
+def test_claude_pre_hook_blocks_webfetch_when_prompt_is_off(tmp_path):
+    config_file = tmp_path / "guardians.json"
+    config_file.write_text(json.dumps({"confirm_with_prompt": False}))
+    payload = {
+        "tool_name": "WebFetch",
+        "tool_input": {"url": "https://guardians-test/compact"},
+        "transcript_path": "",
+    }
+
+    result = run_module(
+        "guardians_of_the_token.claude.pre_tool_guard",
+        payload,
+        {"GUARDIANS_CONFIG": str(config_file)},
+    )
 
     assert result.returncode == 2
     assert result.stderr.startswith("🛡️ Guardians of the Token blocked this request.")
@@ -208,6 +264,7 @@ def test_claude_pre_hook_blocks_webfetch_from_real_head_content_length():
         "tool_name": "WebFetch",
         "tool_input": {"url": url},
         "transcript_path": "",
+        "permission_mode": "bypassPermissions",
     }
 
     try:
@@ -236,6 +293,7 @@ def test_claude_pre_hook_allows_webfetch_when_head_has_no_content_length():
         "tool_name": "WebFetch",
         "tool_input": {"url": url},
         "transcript_path": "",
+        "permission_mode": "bypassPermissions",
     }
 
     try:

@@ -55,3 +55,23 @@ def test_output_block_uses_shared_bulleted_template():
     assert "Limit: 8,000-token soft cap" in message
     assert "1. Inspect a smaller slice" in message
     assert "4. Bypass once for the full output" in message
+
+
+def test_permission_prompt_without_cost_and_for_files():
+    from guardians_of_the_token.messages import format_permission_prompt
+
+    reason, context = format_permission_prompt(
+        target="logs/build.log",
+        estimated_tokens=120_000,
+        context_window=200_000,
+        used_tokens=40_000,
+        kind="file",
+    )
+    assert reason.splitlines() == [
+        "🛡️ Guardians of the Token: large file (~120,000 tokens, 60% of the window).",
+        "Context 20% → 80%.",
+        "Yes loads it in full. No lets Claude suggest a smaller read.",
+    ]
+    assert "logs/build.log" in context
+    assert "4. Summarize a bounded section" in context
+    assert "Bypass" not in context

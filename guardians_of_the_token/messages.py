@@ -93,6 +93,51 @@ def format_context_block(
     return "\n".join(lines)
 
 
+def format_permission_prompt(
+    *,
+    target: str,
+    estimated_tokens: int,
+    context_window: int,
+    used_tokens: int,
+    kind: str,
+    estimated_cost: Optional[float] = None,
+    critical: bool = False,
+) -> tuple[str, str]:
+    """Text for Claude Code's Yes/No permission prompt.
+
+    Returns (reason, context): the reason is shown to the user in the prompt,
+    the context tells Claude what to offer if the user picks No.
+    """
+    is_url = kind == "url"
+    noun, verb = ("page", "fetch") if is_url else ("file", "read")
+    target_pct = (estimated_tokens / context_window) * 100
+    used_pct = (used_tokens / context_window) * 100
+    after_pct = ((used_tokens + estimated_tokens) / context_window) * 100
+    size = f"~{estimated_tokens:,} tokens, {target_pct:.0f}% of the window"
+    if estimated_cost is not None:
+        size += f", ~${estimated_cost:.2f}"
+    effect = f"Context {used_pct:.0f}% → {after_pct:.0f}%"
+    effect += ", likely to trigger compaction." if critical else "."
+    reason = "\n".join(
+        [
+            f"{GUARD_LABEL}: large {noun} ({size}).",
+            effect,
+            f"Yes loads it in full. No lets Claude suggest a smaller {verb}.",
+        ]
+    )
+    options = (URL_OPTIONS if is_url else FILE_OPTIONS)[:-1]  # the prompt's Yes is the bypass
+    choices = "; ".join(
+        f"{i}. {label} ({action})" for i, (label, action) in enumerate(options, 1)
+    )
+    context = (
+        f"{GUARD_LABEL} asked the user to approve this {verb} of {target} "
+        f"(~{estimated_tokens:,} tokens). If they decline, do not retry it as is. "
+        "Offer these smaller options as a short numbered list and wait for their "
+        f"pick: {choices}."
+    )
+    return reason, context
+
+
 def format_output_block(
     *,
     tool_name: str,
