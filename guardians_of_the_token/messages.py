@@ -39,14 +39,6 @@ def _agent_actions(options: list[tuple[str, str]]) -> str:
     return "; ".join(f"{i} = {action}" for i, (_, action) in enumerate(options, 1))
 
 
-def file_next_steps() -> str:
-    return _numbered(FILE_OPTIONS)
-
-
-def url_next_steps() -> str:
-    return _numbered(URL_OPTIONS)
-
-
 def output_next_steps() -> str:
     return _numbered(OUTPUT_OPTIONS)
 

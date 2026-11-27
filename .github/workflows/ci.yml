@@ -31,8 +31,8 @@ jobs:
       - name: Fetch prompt-guard embedding model
         run: guardians-download-models
 
-      - name: Run tests
-        run: python -m pytest
+      - name: Run tests with coverage (must stay at 100%)
+        run: python -m pytest --cov
 
       - name: Smoke test console scripts
         run: |

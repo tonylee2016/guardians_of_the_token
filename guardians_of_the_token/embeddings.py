@@ -134,6 +134,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fetch the bundled MiniLM ONNX + tokenizer into models/."
     )
+    # Accepted for compatibility with the hint in EmbeddingUnavailable; downloading is the default.
+    parser.add_argument("--download", action="store_true", help="Download the model files (default).")
     parser.parse_args()
     path = ensure_model()
     print(f"Model files ready in {path}")

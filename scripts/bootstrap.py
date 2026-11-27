@@ -29,6 +29,10 @@ LOCK_STALE_SECONDS = 15 * 60
 RETRY_AFTER_FAILURE_SECONDS = 6 * 60 * 60
 
 
+def _python_supported() -> bool:
+    return sys.version_info >= (3, 10)
+
+
 def plugin_version() -> str | None:
     try:
         return json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
@@ -152,7 +156,7 @@ def main() -> int:
     else:
         verb = "installing"
 
-    if sys.version_info < (3, 10):
+    if not _python_supported():
         if python is None:
             _notify(f"needs Python 3.10+ (python3 is {sys.version.split()[0]}). {_manual_hint()}")
         return 0
