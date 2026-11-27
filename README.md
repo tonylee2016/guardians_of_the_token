@@ -121,8 +121,8 @@ topic drift. If a prompt looks unrelated to what you've been doing, it's blocked
 
 Reason: this looks unrelated to the current large Claude session.
 Similarity: 0.07 (block threshold 0.10)
-Context: 168.9k / 200.0k tokens (84%)
-Estimated cost if sent: $0.5068
+Context: 412.6k / 1.0M tokens (41%)
+Estimated cost if sent: $1.2378
 
 To continue anyway, resend the prompt prefixed with GOT_UNBLOCK.
 ```
@@ -189,6 +189,16 @@ User config lives at `~/.guardians.json`; per-project overrides go in
     "max_age_hours": 168
   }
 }
+```
+
+Thresholds are percentages of the model's context window, which GOT reads from
+the session transcript: current Claude models (Opus 4.6+, Sonnet 4.6+, the 5.x
+family, Haiku 5.5, Fable) count as 1M tokens; older ones such as Haiku 4.5,
+Sonnet/Opus 4.5 and earlier, and Claude 3.x count as 200K. On an unusual setup
+(a proxy, a custom model id, a smaller deployment) pin it yourself:
+
+```json
+{ "context_window": 200000 }
 ```
 
 Set any feature's `"enabled": false` to turn it off. In `.guardians.toml` you can

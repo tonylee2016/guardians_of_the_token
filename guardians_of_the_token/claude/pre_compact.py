@@ -18,6 +18,7 @@ from guardians_of_the_token.config import load_config
 from guardians_of_the_token.events import event_base_dir, log_event
 from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.state import capture
+from guardians_of_the_token.context_window import resolve_context_window
 from guardians_of_the_token.transcript import effective_context_window, read_signals
 
 
@@ -48,7 +49,8 @@ def main() -> None:
         live_tokens = signals.live_tokens
         if live_tokens is not None:
             window = effective_context_window(
-                int(settings.get("context_window_tokens") or 200_000), live_tokens
+                resolve_context_window(signals.model, config, section="project_state"),
+                live_tokens,
             )
             context_pct = live_tokens / window if window else None
     except Exception:

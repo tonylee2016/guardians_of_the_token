@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 DEFAULT_CONFIG = {
     "warn_threshold_pct": 20,
+    # Pin the context window (tokens) instead of deriving it from the model.
+    "context_window": None,
     "max_output_tokens": 8_000,
     "default_input_price_per_million": 3.0,
     "telemetry_enabled": False,
@@ -23,7 +25,7 @@ DEFAULT_CONFIG = {
     "prices": {},
     "prompt_guard": {
         "enabled": True,
-        "context_window_tokens": 200_000,
+        "context_window_tokens": None,  # legacy per-guard override
         "block_context_pct": 0.30,
         "very_low_similarity": None,
         "unblock_prefix": "GOT_UNBLOCK",

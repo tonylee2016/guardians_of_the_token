@@ -21,10 +21,10 @@ _TAIL_BYTES = 128_000  # wider tail so we capture enough recent text-only assist
 _ANCHOR_MAX_CHARS = 1200
 
 # Snap a pressure denominator up to the smallest known Claude context window
-# that contains the observed live_tokens. Without this, sessions running with
-# the 1m-context beta would show context_pct > 1.0 forever because the
-# configured default is 200_000. Shared by the prompt guard and the
-# project-state capture so both report the same percentage.
+# that contains the observed live_tokens. The window normally comes from the
+# model (see context_window.py); this is a safety net for an unknown model or
+# a stale override, so context_pct never exceeds 1.0. Shared by the prompt
+# guard and the project-state capture so both report the same percentage.
 KNOWN_CONTEXT_WINDOWS = (200_000, 1_000_000)
 
 
@@ -42,6 +42,7 @@ class TranscriptSignals:
     anchor_chunks: list         # individual chunks for per-chunk similarity scoring
     anchor_source: str          # "recap" | "compact" | "conversation" | "none"
     live_tokens: Optional[int]  # input + cache_read + cache_creation; None if absent
+    model: str = ""             # model id of the latest main-chain assistant turn
 
 
 def _read_segment(path: str, *, offset: int, size: int) -> str:
@@ -174,6 +175,21 @@ def _live_context_tokens(text: str) -> Optional[int]:
     return latest
 
 
+def _latest_model(text: str) -> str:
+    """Model id of the latest main-chain assistant turn ("" if none)."""
+    latest = ""
+    for entry in _iter_entries(text):
+        if entry.get("isSidechain") is True or entry.get("isApiErrorMessage"):
+            continue
+        if entry.get("type") != "assistant":
+            continue
+        msg = entry.get("message", {})
+        model = msg.get("model") if isinstance(msg, dict) else None
+        if isinstance(model, str) and model and model != "<synthetic>":
+            latest = model
+    return latest
+
+
 def _truncate(text: str, limit: int = _ANCHOR_MAX_CHARS) -> str:
     text = text.strip()
     if len(text) <= limit:
@@ -250,4 +266,5 @@ def read_signals(
         anchor_chunks=chunks,
         anchor_source=source,
         live_tokens=_live_context_tokens(tail or head),
+        model=_latest_model(tail or head),
     )
