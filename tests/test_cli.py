@@ -1,8 +1,12 @@
 import json
+import sys
 
 from guardians_of_the_token.cli import (
     CLAUDE_HOOKS_JSON,
-    CODEX_MCP_TOML,
+    HOOKS_JSON,
+    claude_desktop_config_path,
+    codex_mcp_toml,
+    with_python,
     color,
     detect_available_clients,
     detect_available_integrations,
@@ -17,6 +21,7 @@ from guardians_of_the_token.cli import (
     show_install_banner,
     workspace_parser,
 )
+
 
 
 def test_merge_hooks_updates_existing_guardians_matcher():
@@ -85,17 +90,19 @@ def test_enable_codex_hooks_config_adds_feature_to_existing_features_table():
         "hooks = true\n"
         "other = true\n"
         "[projects]\n"
-        "[mcp_servers.guardians]\n"
-        'command = "guardians-mcp"\n'
-    )
+    ) + codex_mcp_toml()
 
 
-def test_enable_codex_hooks_config_adds_mcp_server_only_once():
-    existing = "[features]\nhooks = true\n\n[mcp_servers.guardians]\ncommand = \"guardians-mcp\"\n"
+def test_enable_codex_hooks_config_refreshes_old_mcp_server_once():
+    existing = "[features]\nhooks = true\n\n[mcp_servers.guardians]\ncommand = \"guardians-mcp\"\n[other]\nx = 1\n"
 
     updated = enable_codex_hooks_config(existing)
 
-    assert updated == existing
+    assert updated.count("[mcp_servers.guardians]") == 1
+    assert "guardians-mcp" not in updated
+    assert "[other]\nx = 1" in updated
+    assert updated.endswith(codex_mcp_toml())
+    assert enable_codex_hooks_config(updated) == updated
 
 
 def test_enable_codex_hooks_config_migrates_deprecated_feature():
@@ -155,15 +162,16 @@ def test_install_codex_global_merges_hooks_and_enables_config(tmp_path, monkeypa
 
     hooks = json.loads(hooks_path.read_text())
     assert hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == (
-        "python3 -m guardians_of_the_token.codex.pre_tool_guard"
+        with_python(HOOKS_JSON["hooks"])["PreToolUse"][0]["hooks"][0]["command"]
     )
+    assert hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"].startswith(sys.executable)
     assert hooks["hooks"]["PreToolUse"][1]["hooks"][0]["command"] == (
         "python3 -m user_hook"
     )
     assert "hooks = true" in config_path.read_text()
     assert "codex_hooks" not in config_path.read_text()
     assert "[mcp_servers.guardians]" in config_path.read_text()
-    assert 'command = "guardians-mcp"' in config_path.read_text()
+    assert codex_mcp_toml() in config_path.read_text()
     assert fixture_marker.read_text() == "fixtures refreshed"
 
 
@@ -183,7 +191,7 @@ def test_install_codex_global_creates_mcp_config_when_missing(tmp_path, monkeypa
 
     config_text = (codex_dir / "config.toml").read_text()
     assert "hooks = true" in config_text
-    assert CODEX_MCP_TOML in config_text
+    assert codex_mcp_toml() in config_text
 
 
 def test_detect_available_clients(tmp_path, monkeypatch):
@@ -199,8 +207,10 @@ def test_detect_available_integrations(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
     (home / ".claude").mkdir(parents=True)
-    (home / "Library" / "Application Support" / "Claude").mkdir(parents=True)
     monkeypatch.setattr("pathlib.Path.home", lambda: home)
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    claude_desktop_config_path().parent.mkdir(parents=True)
 
     assert detect_available_integrations() == [
         "codex_hooks",
@@ -279,7 +289,7 @@ def test_install_auto_yes_installs_all_detected_clients(tmp_path, monkeypatch, c
     assert (home / ".codex" / "hooks.json").exists()
     assert (home / ".claude" / "settings.json").exists()
     user_config = json.loads((home / ".guardians.json").read_text())
-    assert user_config["telemetry_enabled"] is True
+    assert user_config["telemetry_enabled"] is False
     assert user_config["auto_update_enabled"] is True
     assert user_config["telemetry_api_key"].startswith("phc_")
 
@@ -294,8 +304,8 @@ def test_install_claude_desktop_mcp_writes_desktop_config(tmp_path, monkeypatch)
 
     config = json.loads(config_path.read_text())
     assert config["mcpServers"]["guardians"] == {
-        "command": "guardians-mcp",
-        "args": [],
+        "command": sys.executable,
+        "args": ["-m", "guardians_of_the_token.mcp_server"],
     }
 
 
@@ -434,3 +444,22 @@ def test_guardians_doctor_subcommand(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Guardians doctor" in out
     assert "Codex hooks feature: OK" in out
+
+
+def test_merge_hooks_refreshes_old_python3_command_in_place():
+    existing = {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Read",
+                "hooks": [{"type": "command", "command": "python3 -m guardians_of_the_token.claude.pre_tool_guard"}],
+            }
+        ]
+    }
+
+    merged = merge_hooks(existing, with_python(CLAUDE_HOOKS_JSON["hooks"]))
+
+    assert len(merged["PreToolUse"]) == 1
+    command = merged["PreToolUse"][0]["hooks"][0]["command"]
+    assert command.startswith(sys.executable)
+    assert command.endswith(" -m guardians_of_the_token.claude.pre_tool_guard")
+    assert existing["PreToolUse"][0]["hooks"][0]["command"].startswith("python3")  # input untouched

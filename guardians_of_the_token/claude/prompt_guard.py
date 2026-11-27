@@ -151,10 +151,8 @@ def _block_reason(
         f"tokens ({ctx_pct:.0f}%)\n"
         f"Estimated cost if sent: ${estimated_cost:.4f}\n\n"
         "What you can do:\n"
-        "- New topic? Run /clear, then send it again. A fresh session costs far "
-        "less than carrying this one.\n"
-        f"- Send it here anyway: resend it starting with {prefix} "
-        "(or use /got-unblock <your prompt>)."
+        "- New topic → run /clear, then send it again.\n"
+        f"- Keep it here → send it again starting with {prefix}"
     )
 
 

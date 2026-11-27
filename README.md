@@ -47,22 +47,37 @@ and commands never leave your machine (see
 
 ## Install
 
+One install for every client:
+
 ```bash
-pip install guardians-of-the-token
+pipx install guardians-of-the-token   # or: pip install guardians-of-the-token
 guardians-install
 ```
 
-`guardians-install` detects your local clients (Claude Code, Codex, Claude
-Desktop) and lets you pick what to enable with a checkbox selector. Add `--yes`
-to enable everything detected without prompting. If global installs are blocked,
-use `pipx install guardians-of-the-token` first.
+`guardians-install` finds your clients and sets each one up the best way it
+can. Pick from the checkbox list, or add `--yes` to take everything detected
+(telemetry stays off unless you tick it):
+
+| Client | What `guardians-install` sets up |
+| --- | --- |
+| Claude Code: CLI, VS Code, JetBrains, the Claude app's Code tab | The Claude Code plugin, via the `claude` CLI: hooks, MCP size tools, and `/got-*` skills. Without the `claude` CLI on your `PATH`, it writes the hooks into `~/.claude/settings.json` instead. |
+| Codex CLI | Hooks in `~/.codex/hooks.json` |
+| Codex app | MCP size tools in `~/.codex/config.toml` |
+| Claude app chat (Claude Desktop) | MCP size tools in `claude_desktop_config.json` |
+
+Every hook and MCP entry runs GOT with the full path of the Python it was
+installed into, so pipx and virtualenv installs work. Running `guardians-install`
+again is safe: it refreshes GOT's own entries, leaves yours alone, and when it
+switches Claude Code to the plugin it removes GOT's older `settings.json` hooks
+and `/got-*` skill copies so nothing runs twice. Restart Claude Code afterwards.
 
 That's it — the guards are now active. The rest of this README is what they do
 and how to tune them.
 
-### Install as a Claude Code plugin
+### Install the Claude Code plugin by hand
 
-GOT is also packaged as a Claude Code plugin. In Claude Code, run:
+If you only use Claude Code, you can skip the Python step and run this in
+Claude Code instead:
 
 ```text
 /plugin marketplace add tonylee2016/guardians_of_the_token
@@ -77,9 +92,6 @@ touches your system Python. The guards switch on by themselves when the install
 finishes, usually within a minute. If it fails, the next session tells you and
 points to `~/.guardians/plugin-install.log`.
 
-Use either the plugin or `guardians-install`, not both, or every hook runs
-twice.
-
 Plugin skills are namespaced under the plugin name:
 
 - `/guardians-of-the-token:got-unblock <prompt>` — bypass the prompt guard for
@@ -93,8 +105,8 @@ Plugin skills are namespaced under the plugin name:
 | Client | What GOT guards |
 | --- | --- |
 | Claude Code | `Read`, `Bash`, `WebFetch`, oversized output, off-topic prompts, and cold-start continuity |
-| Codex | risky `Bash` file dumps, URL fetches, oversized output |
-| Claude Desktop / MCP | bounded file tools via `guardians-mcp` (see [Advanced](#advanced)) |
+| Codex CLI | risky `Bash` file dumps, URL fetches, oversized output |
+| Codex app, Claude app chat | MCP size tools: size a file or URL, then read the head, tail, a search, or a summary |
 
 ### 1. Context guard
 

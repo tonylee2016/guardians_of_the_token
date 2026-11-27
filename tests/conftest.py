@@ -36,3 +36,9 @@ def _no_pypi_network(monkeypatch):
         raise OSError("network disabled in tests")
 
     monkeypatch.setattr("guardians_of_the_token.update.latest_pypi_version", offline)
+
+
+@pytest.fixture(autouse=True)
+def _no_claude_cli(monkeypatch):
+    """Installer detection must not depend on whether this machine has the claude CLI."""
+    monkeypatch.setattr("guardians_of_the_token.cli.claude_cli", lambda: None)

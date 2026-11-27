@@ -1,6 +1,11 @@
 import argparse
+import copy
 import json
 import os
+import re
+import shlex
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -110,9 +115,50 @@ CONFIG_TOML = """[features]
 hooks = true
 """
 
-CODEX_MCP_TOML = """[mcp_servers.guardians]
-command = "guardians-mcp"
-"""
+GOT_MODULE_RE = re.compile(r"guardians_of_the_token\.[A-Za-z0-9_.]+")
+MCP_MODULE = "guardians_of_the_token.mcp_server"
+STATUS_MODULE = "guardians_of_the_token.status"
+
+PLUGIN_MARKETPLACE = "tonylee2016/guardians_of_the_token"
+PLUGIN_ID = "guardians-of-the-token@guardians-of-the-token"
+
+
+def python_command() -> str:
+    """The Python that has GOT installed, quoted for a hook's shell command.
+
+    Hooks used to call a bare ``python3``, which can't import GOT when it was
+    installed with pipx or into any other virtualenv. The installing
+    interpreter always can.
+    """
+    exe = sys.executable or "python3"
+    if sys.platform == "win32":
+        return f'"{exe}"' if " " in exe else exe
+    return shlex.quote(exe)
+
+
+def with_python(hooks: dict[str, Any]) -> dict[str, Any]:
+    """Copy of a hooks template whose GOT commands run with this Python."""
+    result = copy.deepcopy(hooks)
+    prefix = "python3 -m "
+    for entries in result.values():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                command = hook.get("command", "")
+                if command.startswith(prefix):
+                    hook["command"] = f"{python_command()} -m {command[len(prefix):]}"
+    return result
+
+
+def status_command() -> str:
+    return f"{python_command()} -m {STATUS_MODULE}"
+
+
+def codex_mcp_toml() -> str:
+    return (
+        "[mcp_servers.guardians]\n"
+        f"command = {json.dumps(sys.executable or 'python3')}\n"
+        f"args = {json.dumps(['-m', MCP_MODULE])}\n"
+    )
 
 FIRST_INSTALL_BANNER = r"""
    ____ ___ _____
@@ -143,28 +189,66 @@ def color(text: str, *styles: str) -> str:
 
 
 def merge_hooks(existing: dict[str, Any], additions: dict[str, Any]) -> dict[str, Any]:
-    """Merge Guardians hook entries into existing hooks dict, skipping duplicates."""
-    result = dict(existing)
+    """Merge Guardians hook entries into an existing hooks dict.
+
+    A GOT hook already present (matched by module, whatever Python it runs
+    with) is updated in place: its command is refreshed and its matcher
+    widened. User hooks are left alone.
+    """
+    result = copy.deepcopy(existing)
     for event, entries in additions.items():
         current = list(result.get(event, []))
         for entry in entries:
+            modules = got_modules(entry)
             addition_cmds = hook_commands(entry)
             matching_entry = next(
                 (
                     existing_entry
                     for existing_entry in current
-                    if hook_commands(existing_entry) & addition_cmds
+                    if (got_modules(existing_entry) & modules)
+                    or (hook_commands(existing_entry) & addition_cmds)
                 ),
                 None,
             )
             if matching_entry is None:
-                current = [entry] + current
+                current = [copy.deepcopy(entry)] + current
                 continue
+            fresh = {
+                module: hook["command"]
+                for hook in entry.get("hooks", [])
+                for module in GOT_MODULE_RE.findall(hook.get("command", ""))
+            }
+            for hook in matching_entry.get("hooks", []):
+                for module in GOT_MODULE_RE.findall(hook.get("command", "")):
+                    if module in fresh:
+                        hook["command"] = fresh[module]
             matching_entry["matcher"] = merge_matcher(
                 str(matching_entry.get("matcher", "")),
                 str(entry.get("matcher", "")),
             )
         result[event] = current
+    return result
+
+
+def got_modules(entry: dict[str, Any]) -> set[str]:
+    return {module for command in hook_commands(entry) for module in GOT_MODULE_RE.findall(command)}
+
+
+def remove_got_hooks(hooks: dict[str, Any]) -> dict[str, Any]:
+    """Drop every GOT hook, keeping the user's own hooks."""
+    result: dict[str, Any] = {}
+    for event, entries in hooks.items():
+        kept_entries = []
+        for entry in entries:
+            kept = [
+                hook
+                for hook in entry.get("hooks", [])
+                if not GOT_MODULE_RE.search(hook.get("command", ""))
+            ]
+            if kept:
+                kept_entries.append({**entry, "hooks": kept})
+        if kept_entries:
+            result[event] = kept_entries
     return result
 
 
@@ -258,10 +342,20 @@ def migrate_codex_hooks_feature(existing: str) -> str:
 
 
 def ensure_codex_mcp_server(existing: str) -> str:
-    if "[mcp_servers.guardians]" in existing:
-        return existing
-    separator = "" if not existing or existing.endswith("\n") else "\n"
-    return f"{existing}{separator}{CODEX_MCP_TOML}"
+    """Add (or refresh) GOT's MCP server entry in a Codex config.toml."""
+    lines = existing.splitlines()
+    kept: list[str] = []
+    skipping = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("["):
+            skipping = stripped == "[mcp_servers.guardians]"
+        if not skipping:
+            kept.append(line)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    body = "\n".join(kept)
+    return f"{body}\n{codex_mcp_toml()}" if body else codex_mcp_toml()
 
 
 def install_codex():
@@ -292,7 +386,7 @@ def install_codex():
         raise SystemExit(
             f"{hooks_path} already exists. Re-run with --force to replace it."
         )
-    hooks_path.write_text(json.dumps(HOOKS_JSON, indent=2) + "\n")
+    hooks_path.write_text(json.dumps({"hooks": with_python(HOOKS_JSON["hooks"])}, indent=2) + "\n")
 
     if config_path.exists() and not args.force:
         existing = config_path.read_text()
@@ -317,7 +411,7 @@ def install_codex_global() -> Path:
     codex_dir.mkdir(parents=True, exist_ok=True)
 
     existing_hooks = json.loads(hooks_path.read_text()) if hooks_path.exists() else {}
-    merged_hooks = merge_hooks(existing_hooks.get("hooks", {}), HOOKS_JSON["hooks"])
+    merged_hooks = merge_hooks(existing_hooks.get("hooks", {}), with_python(HOOKS_JSON["hooks"]))
     existing_hooks["hooks"] = merged_hooks
     hooks_path.write_text(json.dumps(existing_hooks, indent=2) + "\n")
 
@@ -331,7 +425,7 @@ def install_codex_cli_hooks() -> Path:
     hooks_path = codex_dir / "hooks.json"
     codex_dir.mkdir(parents=True, exist_ok=True)
     existing_hooks = json.loads(hooks_path.read_text()) if hooks_path.exists() else {}
-    merged_hooks = merge_hooks(existing_hooks.get("hooks", {}), HOOKS_JSON["hooks"])
+    merged_hooks = merge_hooks(existing_hooks.get("hooks", {}), with_python(HOOKS_JSON["hooks"]))
     existing_hooks["hooks"] = merged_hooks
     hooks_path.write_text(json.dumps(existing_hooks, indent=2) + "\n")
     config_path = codex_dir / "config.toml"
@@ -373,26 +467,40 @@ def install_claude():
         raise SystemExit(
             f"{settings_path} already exists. Re-run with --force to replace it."
         )
-    settings_path.write_text(json.dumps(CLAUDE_HOOKS_JSON, indent=2) + "\n")
+    settings_path.write_text(json.dumps({"hooks": with_python(CLAUDE_HOOKS_JSON["hooks"])}, indent=2) + "\n")
 
     ensure_test_files()
     print(f"Installed Guardians of the Token Claude Code hooks in {claude_dir}")
 
 
 CCSTATUSLINE_CONFIG = Path("~/.config/ccstatusline/settings.json").expanduser()
-GUARDIANS_STATUS_COMMAND = "python3 -m guardians_of_the_token.status"
 
 
 def claude_settings_path() -> Path:
     return Path("~/.claude/settings.json").expanduser()
 
 
+def _is_got_status(command: Any) -> bool:
+    return STATUS_MODULE in str(command or "")
+
+
 def _ccstatusline_has_guardians(config: dict) -> bool:
-    for line in config.get("lines", []):
-        for widget in line:
-            if widget.get("commandPath") == GUARDIANS_STATUS_COMMAND:
-                return True
-    return False
+    return any(
+        _is_got_status(widget.get("commandPath"))
+        for line in config.get("lines", [])
+        for widget in line
+    )
+
+
+def _ccstatusline_refresh_guardians(config: dict) -> dict:
+    lines = [
+        [
+            {**widget, "commandPath": status_command()} if _is_got_status(widget.get("commandPath")) else widget
+            for widget in line
+        ]
+        for line in config.get("lines", [])
+    ]
+    return {**config, "lines": lines}
 
 
 def _ccstatusline_add_guardians(config: dict) -> dict:
@@ -403,7 +511,7 @@ def _ccstatusline_add_guardians(config: dict) -> dict:
     widget_id = str(int(sep_id) + 1)
     first_line.extend([
         {"id": sep_id, "type": "separator"},
-        {"id": widget_id, "type": "custom-command", "commandPath": GUARDIANS_STATUS_COMMAND, "color": "green"},
+        {"id": widget_id, "type": "custom-command", "commandPath": status_command(), "color": "green"},
     ])
     return {**config, "lines": [first_line, *lines[1:]]}
 
@@ -412,18 +520,22 @@ def install_statusline() -> str:
     """Add guardians to ccstatusline if available, otherwise set standalone statusLine."""
     if CCSTATUSLINE_CONFIG.exists():
         config = json.loads(CCSTATUSLINE_CONFIG.read_text())
-        if not _ccstatusline_has_guardians(config):
-            CCSTATUSLINE_CONFIG.write_text(json.dumps(_ccstatusline_add_guardians(config), indent=2) + "\n")
+        if _ccstatusline_has_guardians(config):
+            config = _ccstatusline_refresh_guardians(config)
+        else:
+            config = _ccstatusline_add_guardians(config)
+        CCSTATUSLINE_CONFIG.write_text(json.dumps(config, indent=2) + "\n")
         return "ccstatusline"
 
     settings_path = claude_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    if "statusLine" in existing:
+    current = existing.get("statusLine")
+    if current and not _is_got_status(current.get("command")):
         return "standalone-exists"
     existing["statusLine"] = {
         "type": "command",
-        "command": GUARDIANS_STATUS_COMMAND,
+        "command": status_command(),
         "refreshInterval": 10,
     }
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
@@ -442,7 +554,7 @@ def install_claude_global() -> Path:
     settings_path = claude_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     existing = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    merged_hooks = merge_hooks(existing.get("hooks", {}), CLAUDE_HOOKS_JSON["hooks"])
+    merged_hooks = merge_hooks(existing.get("hooks", {}), with_python(CLAUDE_HOOKS_JSON["hooks"]))
     existing["hooks"] = merged_hooks
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
     install_statusline()
@@ -491,13 +603,13 @@ def _ensure_prompt_guard_model() -> None:
 
 
 def claude_desktop_config_path() -> Path:
-    return (
-        Path.home()
-        / "Library"
-        / "Application Support"
-        / "Claude"
-        / "claude_desktop_config.json"
-    )
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "Claude" / "claude_desktop_config.json"
 
 
 def install_claude_desktop_mcp() -> Path:
@@ -506,11 +618,95 @@ def install_claude_desktop_mcp() -> Path:
     existing = json.loads(config_path.read_text()) if config_path.exists() else {}
     servers = existing.setdefault("mcpServers", {})
     servers["guardians"] = {
-        "command": "guardians-mcp",
-        "args": [],
+        "command": sys.executable or "python3",
+        "args": ["-m", MCP_MODULE],
     }
     config_path.write_text(json.dumps(existing, indent=2) + "\n")
     return config_path
+
+
+# --- Claude Code plugin -----------------------------------------------------
+# The plugin is the best Claude Code setup: hooks behind a fail-open launcher,
+# the MCP size tools, and namespaced skills, in the CLI, IDE extensions and the
+# Claude app's Code tab alike. guardians-install uses it when the `claude` CLI
+# is available and falls back to settings.json hooks otherwise.
+
+
+def claude_cli() -> Optional[str]:
+    return shutil.which("claude")
+
+
+def _run_claude(claude: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [claude, *args], capture_output=True, text=True, timeout=300, check=False
+    )
+
+
+def claude_plugin_installed(claude: str) -> bool:
+    result = _run_claude(claude, "plugin", "list", "--json")
+    if result.returncode != 0:
+        return False
+    try:
+        plugins = json.loads(result.stdout or "[]")
+    except ValueError:
+        return False
+    return any(isinstance(p, dict) and p.get("id") == PLUGIN_ID for p in plugins)
+
+
+def install_claude_plugin() -> bool:
+    """Install the GOT plugin with the claude CLI. Returns False if it can't."""
+    claude = claude_cli()
+    if not claude:
+        return False
+    try:
+        if not claude_plugin_installed(claude):
+            _run_claude(claude, "plugin", "marketplace", "add", PLUGIN_MARKETPLACE)
+            result = _run_claude(claude, "plugin", "install", PLUGIN_ID, "--scope", "user")
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "").strip().splitlines()
+                print(color(f"WARN  claude plugin install failed: {detail[-1] if detail else 'unknown error'}", "yellow"))
+                return False
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(color(f"WARN  could not run the claude CLI: {exc}", "yellow"))
+        return False
+    remove_claude_settings_hooks()
+    remove_claude_skill_copies()
+    return True
+
+
+def remove_claude_settings_hooks() -> bool:
+    """Remove GOT hooks from ~/.claude/settings.json so the plugin's don't run twice."""
+    settings_path = claude_settings_path()
+    if not settings_path.exists():
+        return False
+    existing = json.loads(settings_path.read_text())
+    hooks = existing.get("hooks")
+    if not hooks:
+        return False
+    cleaned = remove_got_hooks(hooks)
+    if cleaned == hooks:
+        return False
+    if cleaned:
+        existing["hooks"] = cleaned
+    else:
+        existing.pop("hooks")
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    return True
+
+
+def remove_claude_skill_copies() -> list[Path]:
+    """Remove the /got-* skills an earlier hooks install copied into ~/.claude/skills."""
+    removed: list[Path] = []
+    if not _BUNDLED_SKILLS_DIR.exists():
+        return removed
+    for skill_src in _BUNDLED_SKILLS_DIR.iterdir():
+        dest_md = claude_skills_dir() / skill_src.name / "SKILL.md"
+        if dest_md.exists() and "Guardians" in dest_md.read_text():
+            dest_md.unlink()
+            if not any(dest_md.parent.iterdir()):
+                dest_md.parent.rmdir()
+            removed.append(dest_md)
+    return removed
 
 
 def detect_available_integrations() -> list[str]:
@@ -518,8 +714,8 @@ def detect_available_integrations() -> list[str]:
     home = Path.home()
     if (home / ".codex").exists():
         integrations.extend(["codex_hooks", "codex_mcp"])
-    if (home / ".claude").exists():
-        integrations.append("claude_code_hooks")
+    if (home / ".claude").exists() or claude_cli():
+        integrations.append("claude_code_plugin" if claude_cli() else "claude_code_hooks")
     if claude_desktop_config_path().parent.exists():
         integrations.append("claude_desktop_mcp")
     return integrations
@@ -555,6 +751,7 @@ def client_labels() -> dict[str, str]:
     return {
         "codex_hooks": "Codex CLI hooks",
         "codex_mcp": "Codex app MCP",
+        "claude_code_plugin": "Claude Code plugin",
         "claude_code_hooks": "Claude Code hooks",
         "claude_desktop_mcp": "Claude Desktop MCP",
         TELEMETRY_OPTION: "Anonymous telemetry",
@@ -566,8 +763,9 @@ def client_descriptions() -> dict[str, str]:
     return {
         "codex_hooks": "Guards Codex shell file reads, URL fetches, and large Bash output.",
         "codex_mcp": "Registers got_file_size and safe bounded tools in the Codex app.",
+        "claude_code_plugin": "Every Claude Code guard plus the MCP size tools and /got-* skills, in the CLI, IDE extensions, and the Claude app's Code tab. Replaces older GOT hooks in settings.json.",
         "claude_code_hooks": "Guards Claude Code Read, Bash, WebFetch, oversized output, and unrelated prompts in large sessions.",
-        "claude_desktop_mcp": "Registers GOT MCP tools for Claude Desktop project workflows.",
+        "claude_desktop_mcp": "Registers the GOT MCP size tools in the Claude app's chat.",
         TELEMETRY_OPTION: "Sends anonymous install/tool usage metadata only. No paths, URLs, prompts, content, commands, actions, risk, or token counts.",
         AUTO_UPDATE_OPTION: "Keeps Guardians updated from PyPI when Claude/Codex sessions start. Rate-limited and fail-open.",
     }
@@ -722,7 +920,7 @@ def install_auto():
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="Install into all detected clients without prompting.",
+        help="Install into all detected clients without prompting (telemetry stays off).",
     )
     args = parser.parse_args()
 
@@ -732,7 +930,7 @@ def install_auto():
             "No supported client home was detected. Expected ~/.codex and/or ~/.claude."
         )
     show_install_banner()
-    selected = [*integrations, TELEMETRY_OPTION, AUTO_UPDATE_OPTION] if args.yes else select_clients_interactive(integrations)
+    selected = [*integrations, AUTO_UPDATE_OPTION] if args.yes else select_clients_interactive(integrations)
     configure_user_telemetry(TELEMETRY_OPTION in selected)
     configure_user_auto_update(AUTO_UPDATE_OPTION in selected)
 
@@ -745,6 +943,16 @@ def install_auto():
         print(color("Installing Codex app MCP...", "blue", "bold"))
         install_codex_app_mcp()
         installed.append("OK Codex app MCP")
+    if "claude_code_plugin" in selected:
+        print(color("Installing the Claude Code plugin...", "blue", "bold"))
+        if install_claude_plugin():
+            install_statusline()
+            _ensure_prompt_guard_model()
+            installed.append("OK Claude Code plugin (restart Claude Code to load it)")
+        else:
+            print(color("Falling back to Claude Code hooks in ~/.claude/settings.json...", "blue", "bold"))
+            install_claude_global()
+            installed.append("OK Claude Code hooks")
     if "claude_code_hooks" in selected:
         print(color("Installing Claude Code hooks...", "blue", "bold"))
         install_claude_global()
