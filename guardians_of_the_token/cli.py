@@ -2,10 +2,15 @@ import argparse
 import json
 import os
 import sys
-import termios
-import tty
 from pathlib import Path
 from typing import Any, Optional
+
+try:  # POSIX only; Windows falls back to the numbered text selector.
+    import termios
+    import tty
+except ImportError:
+    termios = None
+    tty = None
 
 from guardians_of_the_token.test_support import ensure_test_files
 from guardians_of_the_token.config import DEFAULT_CONFIG
@@ -541,7 +546,7 @@ AUTO_UPDATE_OPTION = "auto_update"
 
 def select_clients_interactive(integrations: list[str]) -> list[str]:
     options = [*integrations, TELEMETRY_OPTION, AUTO_UPDATE_OPTION]
-    if sys.stdin.isatty() and sys.stdout.isatty():
+    if termios is not None and sys.stdin.isatty() and sys.stdout.isatty():
         return select_clients_tty(options, integrations)
     return select_clients_text(options, integrations)
 

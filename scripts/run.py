@@ -26,7 +26,7 @@ def main() -> int:
     if python is None:
         return 0
     args = [python, "-m", *sys.argv[1:]]
-    if os.name == "nt":
+    if sys.platform == "win32":
         import subprocess
 
         return subprocess.call(args)

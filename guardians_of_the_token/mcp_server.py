@@ -62,10 +62,6 @@ def safe_path(raw_path: str) -> Path:
     return Path(raw_path).expanduser().resolve()
 
 
-def load_config() -> dict:
-    return load_guardians_config()
-
-
 def configured_context_window(args: dict) -> int:
     config = load_guardians_config(args.get("path") or args.get("project_path") or ".")
     return int(args.get("context_window") or config.get("context_window") or DEFAULT_CONTEXT_WINDOW)
