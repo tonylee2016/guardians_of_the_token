@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "pytest",
+  "pytest-cov",
 ]
 
 [project.scripts]
@@ -49,3 +50,16 @@ include = ["guardians_of_the_token*"]
 
 [tool.setuptools.package-data]
 guardians_of_the_token = ["*.html", "claude/skills/*/SKILL.md"]
+
+[tool.coverage.run]
+source = ["guardians_of_the_token", "scripts"]
+branch = false
+patch = ["subprocess"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 100
+exclude_also = [
+  "if __name__ == .__main__.:",
+]

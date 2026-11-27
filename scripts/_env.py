@@ -26,7 +26,7 @@ def venv_dir() -> Path:
 
 
 def venv_python() -> Path:
-    if os.name == "nt":
+    if sys.platform == "win32":
         return venv_dir() / "Scripts" / "python.exe"
     return venv_dir() / "bin" / "python"
 
