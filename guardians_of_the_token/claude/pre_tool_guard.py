@@ -3,14 +3,17 @@
 PreToolUse hook — Guardians of the Token.
 
 Intercepts tool calls BEFORE execution:
-  - Read:  auto-detects context window from transcript, warns if file would
-           push usage over warn_threshold_pct (default 20%). Blocks and asks.
+  - Read / WebFetch: estimates the size against the context window. Over
+           warn_threshold_pct (default 20%) Claude Code shows its Yes/No
+           permission prompt with GOT's estimate (or blocks, when
+           confirm_with_prompt is false or permissions are bypassed).
   - Bash:  pipes command through cap_output.py to cap raw output size.
 
 Config file (~/.guardians.json) — all fields optional:
   {
     "warn_threshold_pct": 20,   # warn if file > this % of context window
-    "context_window": 200000    # optional: pin the window instead of using the model's
+    "context_window": 200000,   # optional: pin the window instead of using the model's
+    "confirm_with_prompt": true # Yes/No permission prompt instead of a hard block
   }
 
 Bypass (single-use): touch /tmp/guardians_bypass before retrying.
@@ -26,7 +29,7 @@ from guardians_of_the_token import context_window as shared_context_window
 from guardians_of_the_token.config import estimate_cost, load_config, policy_decision
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
-from guardians_of_the_token.messages import format_context_block
+from guardians_of_the_token.messages import format_context_block, format_permission_prompt
 from guardians_of_the_token.pause import is_paused
 
 BYPASS_FILE = "/tmp/guardians_bypass"
@@ -102,12 +105,39 @@ def is_bypass() -> bool:
     return False
 
 
+# Permission modes where Claude Code would not show the prompt, so GOT blocks instead.
+NO_PROMPT_MODES = {"bypassPermissions"}
+
+
+def use_permission_prompt(config: dict, permission_mode: str) -> bool:
+    return bool(config.get("confirm_with_prompt", True)) and permission_mode not in NO_PROMPT_MODES
+
+
+def ask_permission(reason: str, context: str):
+    """Hand the call to Claude Code's own Yes/No permission prompt."""
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": reason,
+                    "additionalContext": context,
+                }
+            }
+        )
+    )
+    sys.exit(0)
+
+
 def modify(tool_input: dict):
     sys.stdout.write(json.dumps({"tool_input": tool_input}))
     sys.exit(0)
 
 
-def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = ""):
+def guard_read(
+    tool_input: dict, transcript_path: str, config: dict, cwd: str = "", permission_mode: str = ""
+):
     file_path = tool_input.get("file_path", "")
     try:
         os.path.getsize(file_path)
@@ -140,6 +170,32 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = 
     will_compact = after_pct >= COMPACT_PCT
     cost = estimate_cost(file_tokens, file_config, model_label)
 
+    if use_permission_prompt(file_config, permission_mode):
+        log_event(
+            {
+                "client": "claude",
+                "kind": "file",
+                "target": file_path,
+                "action": "asked",
+                "estimated_tokens": file_tokens,
+                "estimated_cost": cost,
+                "risk": estimate["risk"],
+            },
+            config=config,
+            base_dir=cwd,
+        )
+        ask_permission(
+            *format_permission_prompt(
+                target=file_path,
+                estimated_tokens=file_tokens,
+                context_window=context_window,
+                used_tokens=used_tokens,
+                kind="file",
+                estimated_cost=cost,
+                critical=will_compact,
+            )
+        )
+
     print(
         format_context_block(
             target=file_path,
@@ -171,7 +227,7 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = 
     sys.exit(2)
 
 
-def guard_webfetch(tool_input: dict, transcript_path: str, config: dict):
+def guard_webfetch(tool_input: dict, transcript_path: str, config: dict, permission_mode: str = ""):
     url = tool_input.get("url", "")
     if not url:
         return
@@ -202,6 +258,31 @@ def guard_webfetch(tool_input: dict, transcript_path: str, config: dict):
     content_length = head["content_length"]
     size_kb = content_length // 1024 if content_length is not None else None
     cost = estimate_cost(estimated_tokens, config, model_label)
+
+    if use_permission_prompt(config, permission_mode):
+        log_event(
+            {
+                "client": "claude",
+                "kind": "url",
+                "target": url,
+                "action": "asked",
+                "estimated_tokens": estimated_tokens,
+                "estimated_cost": cost,
+                "risk": estimate["risk"],
+            },
+            config=config,
+        )
+        ask_permission(
+            *format_permission_prompt(
+                target=url,
+                estimated_tokens=estimated_tokens,
+                context_window=context_window,
+                used_tokens=used_tokens,
+                kind="url",
+                estimated_cost=cost,
+                critical=will_compact,
+            )
+        )
 
     print(
         format_context_block(
@@ -261,13 +342,14 @@ def main():
     transcript_path = payload.get("transcript_path", "")
     cwd = payload.get("cwd") or os.getcwd()
     config = load_config(cwd)
+    permission_mode = payload.get("permission_mode", "")
 
     if tool_name == "Read":
-        guard_read(tool_input, transcript_path, config, cwd=cwd)
+        guard_read(tool_input, transcript_path, config, cwd=cwd, permission_mode=permission_mode)
     elif tool_name == "Bash":
         guard_bash(tool_input)
     elif tool_name == "WebFetch":
-        guard_webfetch(tool_input, transcript_path, config)
+        guard_webfetch(tool_input, transcript_path, config, permission_mode=permission_mode)
 
     sys.exit(0)
 
