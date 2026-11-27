@@ -26,6 +26,33 @@ def test_install_properties_only_include_runtime_metadata_and_disable_geoip():
     assert "url" not in props
 
 
+def _clear_ci_env(monkeypatch):
+    for name in telemetry.CI_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_is_ci_false_without_ci_env(monkeypatch):
+    _clear_ci_env(monkeypatch)
+
+    assert telemetry.is_ci() is False
+    assert telemetry.install_properties()["is_ci"] is False
+
+
+def test_is_ci_true_on_github_actions(monkeypatch):
+    _clear_ci_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+
+    assert telemetry.is_ci() is True
+    assert telemetry.install_properties()["is_ci"] is True
+
+
+def test_is_ci_ignores_falsey_values(monkeypatch):
+    _clear_ci_env(monkeypatch)
+    monkeypatch.setenv("CI", "false")
+
+    assert telemetry.is_ci() is False
+
+
 def test_capture_install_sends_single_anonymous_install_event(monkeypatch):
     calls = []
 
@@ -62,6 +89,7 @@ def test_capture_install_sends_single_anonymous_install_event(monkeypatch):
     assert "got_version" in body["properties"]
     assert "python_version" in body["properties"]
     assert "platform" in body["properties"]
+    assert isinstance(body["properties"]["is_ci"], bool)
     assert "client" not in body["properties"]
     assert "kind" not in body["properties"]
     assert "risk" not in body["properties"]

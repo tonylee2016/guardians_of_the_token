@@ -51,6 +51,33 @@ def anonymous_id() -> str:
         return str(uuid.uuid4())
 
 
+CI_ENV_VARS = (
+    "CI",
+    "CONTINUOUS_INTEGRATION",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "CIRCLECI",
+    "TRAVIS",
+    "BUILDKITE",
+    "JENKINS_URL",
+    "TEAMCITY_VERSION",
+    "TF_BUILD",
+    "BITBUCKET_BUILD_NUMBER",
+    "CODEBUILD_BUILD_ID",
+    "DRONE",
+    "SEMAPHORE",
+    "APPVEYOR",
+)
+
+
+def is_ci() -> bool:
+    for name in CI_ENV_VARS:
+        value = os.environ.get(name)
+        if value and value.strip().lower() not in {"0", "false", "no", "off"}:
+            return True
+    return False
+
+
 def install_properties() -> dict[str, Any]:
     return {
         "$geoip_disable": True,
@@ -58,6 +85,7 @@ def install_properties() -> dict[str, Any]:
         "got_version": __version__,
         "python_version": platform.python_version(),
         "platform": platform.system().lower(),
+        "is_ci": is_ci(),
     }
 
 
