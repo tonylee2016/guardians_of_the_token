@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.py\"",
-            "timeout": 600
+            "timeout": 30
           },
           {
             "type": "command",

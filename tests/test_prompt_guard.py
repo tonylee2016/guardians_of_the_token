@@ -124,6 +124,13 @@ def test_plugin_namespaced_skills_allowed(monkeypatch, prompt):
     _assert_allowed(prompt_guard.evaluate(prompt, "x", _config()), "allowlisted")
 
 
+@pytest.mark.parametrize("reply", ["1", "3", " 5 "])
+def test_numbered_option_reply_allowed(monkeypatch, reply):
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
+    _stub_embed(monkeypatch, similarity=0.0)
+    _assert_allowed(prompt_guard.evaluate(reply, "x", _config()), "allowlisted")
+
+
 def test_short_continuation_allowed(monkeypatch):
     _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=180_000)
     _stub_embed(monkeypatch, similarity=0.0)

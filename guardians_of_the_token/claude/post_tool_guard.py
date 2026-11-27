@@ -68,7 +68,11 @@ def main():
                 tokens=tokens,
                 soft_cap=soft_cap,
                 estimated_cost=cost,
-            )
+                verb="flagged",
+                relay=True,
+            ),
+            # PostToolUse exit 2: Claude Code shows stderr to Claude; stdout is ignored.
+            file=sys.stderr,
         )
         log_event(
             {

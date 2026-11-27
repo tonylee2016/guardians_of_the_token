@@ -71,8 +71,8 @@ def test_codex_pre_hook_blocks_large_file_with_shared_template(tmp_path):
     assert reason.startswith("🛡️ Guardians of the Token blocked this command.")
     assert f"Target: {target}" in reason
     assert "Estimate: ~200,000 tokens (50% of the 400,000-token window on gpt-5.5)" in reason
-    assert "- Inspect the beginning" in reason
-    assert "- Bypass once for the full file" in reason
+    assert "1. Inspect the beginning" in reason
+    assert "5. Bypass once for the full file" in reason
     assert "sed -n" not in reason
 
 
@@ -91,8 +91,8 @@ def test_codex_pre_hook_blocks_large_url_with_shared_template():
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
     assert reason.startswith("🛡️ Guardians of the Token blocked this command.")
     assert "Target: https://guardians-test/compact" in reason
-    assert "- Inspect metadata" in reason
-    assert "- Bypass once for the full response" in reason
+    assert "1. Inspect metadata" in reason
+    assert "5. Bypass once for the full response" in reason
 
 
 def test_codex_pre_hook_allows_download_to_file_without_blocking():
@@ -154,7 +154,7 @@ def test_codex_post_hook_suppresses_large_output_with_shared_template():
     response = json.loads(result.stdout)
     assert response["decision"] == "block"
     assert response["reason"].startswith("🛡️ Guardians of the Token suppressed large Bash output.")
-    assert "- Inspect a smaller slice" in response["reason"]
+    assert "1. Inspect a smaller slice" in response["reason"]
 
 
 def test_claude_pre_hook_blocks_read_with_shared_template(tmp_path):
@@ -175,8 +175,8 @@ def test_claude_pre_hook_blocks_read_with_shared_template(tmp_path):
     assert result.returncode == 2
     assert result.stderr.startswith("🛡️ Guardians of the Token blocked this request.")
     assert f"Target: {target}" in result.stderr
-    assert "- Inspect the beginning" in result.stderr
-    assert "- Bypass once for the full file" in result.stderr
+    assert "1. Inspect the beginning" in result.stderr
+    assert "5. Bypass once for the full file" in result.stderr
 
 
 def test_claude_pre_hook_blocks_webfetch_with_shared_template():
@@ -191,8 +191,8 @@ def test_claude_pre_hook_blocks_webfetch_with_shared_template():
     assert result.returncode == 2
     assert result.stderr.startswith("🛡️ Guardians of the Token blocked this request.")
     assert "Target: https://guardians-test/compact" in result.stderr
-    assert "- Inspect metadata" in result.stderr
-    assert "- Bypass once for the full response" in result.stderr
+    assert "1. Inspect metadata" in result.stderr
+    assert "5. Bypass once for the full response" in result.stderr
 
 
 def test_claude_pre_hook_blocks_webfetch_from_real_head_content_length():
@@ -284,5 +284,6 @@ def test_claude_post_hook_suppresses_large_output_with_shared_template():
     )
 
     assert result.returncode == 2
-    assert result.stdout.startswith("🛡️ Guardians of the Token suppressed large Bash output.")
-    assert "- Inspect a smaller slice" in result.stdout
+    assert result.stderr.startswith("🛡️ Guardians of the Token flagged large Bash output.")
+    assert "1. Inspect a smaller slice" in result.stderr
+    assert "1 = rerun with output limited" in result.stderr
