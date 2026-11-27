@@ -29,6 +29,7 @@ from guardians_of_the_token.embeddings import (
 from guardians_of_the_token.events import event_base_dir, log_event
 from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.state import maybe_capture_on_pressure
+from guardians_of_the_token.context_window import resolve_context_window
 from guardians_of_the_token.transcript import effective_context_window, read_signals
 
 GOT_SKILLS = ("got-unblock", "got-resume", "got-pause")
@@ -182,7 +183,6 @@ def evaluate(
     if _is_allowlisted(prompt):
         return _allow("allowlisted")
 
-    configured_window = int(_setting(settings, "context_window_tokens", 200_000))
     block_pct = float(_setting(settings, "block_context_pct", 0.30))
     fallback_n = int(_setting(settings, "fallback_user_prompts", 3))
 
@@ -190,6 +190,7 @@ def evaluate(
     if signals.live_tokens is None:
         return _allow("no-usage", anchor_source=signals.anchor_source)
 
+    configured_window = resolve_context_window(signals.model, config, section="prompt_guard")
     window = effective_context_window(configured_window, signals.live_tokens)
     context_pct = signals.live_tokens / window
     base_extras = {

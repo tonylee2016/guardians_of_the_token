@@ -9,7 +9,8 @@ Intercepts tool calls BEFORE execution:
 
 Config file (~/.guardians.json) — all fields optional:
   {
-    "warn_threshold_pct": 20    # warn if file > this % of context window
+    "warn_threshold_pct": 20,   # warn if file > this % of context window
+    "context_window": 200000    # optional: pin the window instead of using the model's
   }
 
 Bypass (single-use): touch /tmp/guardians_bypass before retrying.
@@ -19,7 +20,9 @@ Test mode: set GUARDIANS_TEST_SIZE=<bytes> to fake file size.
 import json
 import os
 import sys
+from typing import Optional
 
+from guardians_of_the_token import context_window as shared_context_window
 from guardians_of_the_token.config import estimate_cost, load_config, policy_decision
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
@@ -31,20 +34,7 @@ CAP_MODULE = "guardians_of_the_token.claude.cap_output"
 
 DEFAULT_WARN_PCT = 20
 COMPACT_PCT = 90           # Claude Code compacts at ~95%; warn at 90%
-FALLBACK_CONTEXT_WINDOW = 200_000
-
-# Known context windows by model prefix (tokens)
-MODEL_CONTEXT_WINDOWS = {
-    "claude-":      200_000,   # all Claude 3+ models
-    "claude-2":     100_000,
-    "o1":           200_000,
-    "o3":           200_000,
-    "gpt-4o":       128_000,
-    "gpt-4-turbo":  128_000,
-    "gpt-4-32k":     32_768,
-    "gpt-4":          8_192,
-    "gpt-3.5":       16_385,
-}
+FALLBACK_CONTEXT_WINDOW = shared_context_window.FALLBACK_CONTEXT_WINDOW
 
 # How many bytes to read from the end of the transcript to find model/usage
 TRANSCRIPT_TAIL = 32_000
@@ -97,11 +87,10 @@ def detect_model_and_usage(transcript_path: str) -> tuple[str, int]:
     return model, used_tokens
 
 
-def model_to_context_window(model: str) -> int:
-    for prefix, window in MODEL_CONTEXT_WINDOWS.items():
-        if model.startswith(prefix):
-            return window
-    return FALLBACK_CONTEXT_WINDOW
+def model_to_context_window(model: str, config: Optional[dict] = None) -> int:
+    return shared_context_window.resolve_context_window(
+        model, config, fallback=FALLBACK_CONTEXT_WINDOW
+    )
 
 
 def is_bypass() -> bool:
@@ -131,7 +120,7 @@ def guard_read(tool_input: dict, transcript_path: str, config: dict, cwd: str = 
 
     warn_pct = file_config.get("warn_threshold_pct", DEFAULT_WARN_PCT)
     model, used_tokens = detect_model_and_usage(transcript_path)
-    context_window = model_to_context_window(model)
+    context_window = model_to_context_window(model, file_config)
     model_label = model if model else "unknown model"
 
     estimate = estimate_file(file_path, context_window=context_window, warn_pct=warn_pct)
@@ -189,7 +178,7 @@ def guard_webfetch(tool_input: dict, transcript_path: str, config: dict):
 
     warn_pct = config.get("warn_threshold_pct", DEFAULT_WARN_PCT)
     model, used_tokens = detect_model_and_usage(transcript_path)
-    context_window = model_to_context_window(model)
+    context_window = model_to_context_window(model, config)
     model_label = model if model else "unknown model"
     try:
         head = url_head_metadata(url)

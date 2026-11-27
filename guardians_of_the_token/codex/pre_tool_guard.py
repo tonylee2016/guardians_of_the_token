@@ -10,8 +10,10 @@ import json
 import os
 import shlex
 import sys
+from typing import Optional
 
 from guardians_of_the_token.config import estimate_cost, load_config, policy_decision
+from guardians_of_the_token import context_window as shared_context_window
 from guardians_of_the_token.events import log_event
 from guardians_of_the_token.pause import is_paused
 from guardians_of_the_token.estimate import estimate_file, estimate_url, url_head_metadata
@@ -22,21 +24,8 @@ BYPASS_FILE = "/tmp/guardians_bypass"
 
 DEFAULT_WARN_PCT = 20
 COMPACT_PCT = 90
-FALLBACK_CONTEXT_WINDOW = 400_000
+FALLBACK_CONTEXT_WINDOW = 400_000  # Codex models are GPT-5 family
 TRANSCRIPT_TAIL = 32_000
-
-MODEL_CONTEXT_WINDOWS = {
-    "gpt-5": 400_000,
-    "gpt-5.1": 400_000,
-    "gpt-5.2": 400_000,
-    "gpt-5.3": 400_000,
-    "gpt-5.4": 400_000,
-    "gpt-5.5": 400_000,
-    "gpt-5-codex": 400_000,
-    "o3": 200_000,
-    "o1": 200_000,
-    "claude-": 200_000,
-}
 
 FULL_FILE_COMMANDS = {"cat", "bat", "batcat", "nl", "more", "less"}
 FETCH_COMMANDS = {"curl", "wget", "fetch"}
@@ -96,11 +85,10 @@ def detect_model_and_usage(transcript_path: str) -> tuple:
     return model, used_tokens
 
 
-def model_to_context_window(model: str) -> int:
-    for prefix, window in MODEL_CONTEXT_WINDOWS.items():
-        if model.startswith(prefix):
-            return window
-    return FALLBACK_CONTEXT_WINDOW
+def model_to_context_window(model: str, config: Optional[dict] = None) -> int:
+    return shared_context_window.resolve_context_window(
+        model, config, fallback=FALLBACK_CONTEXT_WINDOW
+    )
 
 
 def is_bypass() -> bool:
@@ -267,7 +255,7 @@ def context_from_payload(payload: dict) -> tuple:
     model, used_tokens = detect_model_and_usage(payload.get("transcript_path", ""))
     if not model:
         model = str(payload.get("model", "") or "")
-    context_window = model_to_context_window(model)
+    context_window = model_to_context_window(model, config)
     warn_tokens = int(context_window * warn_pct / 100)
     model_label = model or "unknown model"
     return used_tokens, context_window, warn_tokens, model_label, config

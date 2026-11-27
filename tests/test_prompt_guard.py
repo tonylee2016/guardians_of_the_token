@@ -34,7 +34,7 @@ def _stub_embed(monkeypatch, similarity: float):
     )
 
 
-def _stub_signals(monkeypatch, *, anchor: str, source: str, live_tokens):
+def _stub_signals(monkeypatch, *, anchor: str, source: str, live_tokens, model: str = ""):
     from guardians_of_the_token.transcript import TranscriptSignals
 
     monkeypatch.setattr(
@@ -45,6 +45,7 @@ def _stub_signals(monkeypatch, *, anchor: str, source: str, live_tokens):
             anchor_chunks=[anchor] if anchor else [],
             anchor_source=source,
             live_tokens=live_tokens,
+            model=model,
         ),
     )
 
@@ -94,6 +95,31 @@ def test_effective_window_keeps_default_under_pressure(monkeypatch):
         "totally unrelated prompt about traveling somewhere far away",
         "x",
         _config(block_context_pct=0.30),
+    )
+    assert decision["action"] == "blocked"
+    assert decision["context_window"] == 200_000
+
+
+def test_window_comes_from_model_when_not_pinned(monkeypatch):
+    # 120k live tokens on a 1M-window model is 12% — well under the 30% bar.
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=120_000, model="claude-opus-5-5")
+    _stub_embed(monkeypatch, similarity=0.05)
+    decision = prompt_guard.evaluate(
+        "totally unrelated prompt about traveling somewhere far away",
+        "x",
+        _config(context_window_tokens=None, block_context_pct=0.30),
+    )
+    _assert_allowed(decision, "low-pressure")
+    assert decision["context_pct"] == pytest.approx(0.12)
+
+
+def test_window_for_200k_model(monkeypatch):
+    _stub_signals(monkeypatch, anchor="topic", source="recap", live_tokens=120_000, model="claude-haiku-4-5-20251001")
+    _stub_embed(monkeypatch, similarity=0.05)
+    decision = prompt_guard.evaluate(
+        "totally unrelated prompt about traveling somewhere far away",
+        "x",
+        _config(context_window_tokens=None, block_context_pct=0.30),
     )
     assert decision["action"] == "blocked"
     assert decision["context_window"] == 200_000
