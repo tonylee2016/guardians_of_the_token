@@ -407,6 +407,15 @@ def test_no_transcript_returns_none(tmp_path):
 
 # --- main() event logging ---
 
+# The hook runs in a subprocess from a temp dir; put this checkout first on the
+# path so it never imports an older copy installed in site-packages.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _hook_env(config_path):
+    pythonpath = os.pathsep.join(filter(None, [REPO_ROOT, os.environ.get("PYTHONPATH")]))
+    return {**os.environ, "GUARDIANS_CONFIG": str(config_path), "PYTHONPATH": pythonpath}
+
 
 def _run_hook(payload, cwd):
     return subprocess.run(
@@ -414,7 +423,7 @@ def _run_hook(payload, cwd):
         input=json.dumps(payload),
         text=True,
         capture_output=True,
-        env={**os.environ, "GUARDIANS_CONFIG": str(cwd / "no-such-config.json")},
+        env=_hook_env(cwd / "no-such-config.json"),
         cwd=str(cwd),
         check=False,
     )
@@ -474,7 +483,7 @@ def test_main_logs_blocked_event_locally(tmp_path, monkeypatch):
         input=json.dumps(payload),
         text=True,
         capture_output=True,
-        env={**os.environ, "GUARDIANS_CONFIG": str(config_file)},
+        env=_hook_env(config_file),
         cwd=str(tmp_path),
         check=False,
     )
