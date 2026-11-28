@@ -22,6 +22,7 @@ Test mode: set GUARDIANS_TEST_SIZE=<bytes> to fake file size.
 
 import json
 import os
+import shlex
 import sys
 from typing import Optional
 
@@ -333,10 +334,13 @@ def wrap_command(command: str) -> str:
     The exit code is sent as a final marker line that cap_output strips and
     exits with, so the pipeline reports the command's status, not cap_output's.
     The newline before ")" keeps a trailing "# comment" from swallowing it.
+    It uses this hook's own Python, which has the package: a plugin install
+    keeps it in a private venv that a bare "python3" would not see.
     """
+    python = shlex.quote(sys.executable or "python3")
     return (
         f"{{ ({command}\n) 2>&1; printf '\\036GOT_EXIT=%s\\n' \"$?\"; }}"
-        f" | python3 -m {CAP_MODULE}"
+        f" | {python} -m {CAP_MODULE}"
     )
 
 

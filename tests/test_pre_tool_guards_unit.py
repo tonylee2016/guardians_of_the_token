@@ -2,6 +2,7 @@
 
 import io
 import json
+import shlex
 import sys
 
 import pytest
@@ -109,7 +110,7 @@ def test_claude_bash_command_gets_wrapped(monkeypatch):
     assert hook_out["hookEventName"] == "PreToolUse"
     assert hook_out["updatedInput"]["command"] == (
         "{ (ls\n) 2>&1; printf '\\036GOT_EXIT=%s\\n' \"$?\"; }"
-        f" | python3 -m {claude_guard.CAP_MODULE}"
+        f" | {shlex.quote(sys.executable)} -m {claude_guard.CAP_MODULE}"
     )
     assert "permissionDecision" not in hook_out
     assert "tool_input" not in json.loads(out)
