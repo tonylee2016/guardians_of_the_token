@@ -197,23 +197,26 @@ def test_embedding_error_is_allowed(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("onnx crashed")
 
-    monkeypatch.setattr(prompt_guard, "_max_chunk_similarity", boom)
-    decision = prompt_guard.evaluate("plan a trip", "x", {"prompt_guard": {}})
+    monkeypatch.setattr(prompt_guard, "_centroid_similarity", boom)
+    decision = prompt_guard.evaluate("plan a trip to Tokyo", "x", {"prompt_guard": {}})
     assert decision["reason"] == "embedding-error"
 
 
-def test_max_chunk_similarity_variants(monkeypatch):
+def test_centroid_similarity_variants(monkeypatch):
     import numpy as np
 
-    assert prompt_guard._max_chunk_similarity(["", None], "p", model_name="m") == 0.0
-    monkeypatch.setattr(prompt_guard, "cosine_similarity", lambda a, b, model_name: 0.42)
-    assert prompt_guard._max_chunk_similarity(["one"], "p", model_name="m") == 0.42
-    monkeypatch.setattr(
-        prompt_guard,
-        "embed",
-        lambda texts, model_name: np.array([[1.0, 0.0], [0.6, 0.8], [0.6, 0.8]]),
-    )
-    assert prompt_guard._max_chunk_similarity(["a", "b"], "p", model_name="m") == pytest.approx(1.0)
+    assert prompt_guard._centroid_similarity(["", None], "p", model_name="m") == 0.0
+    vectors = {"on": [[1.0, 0.0], [0.6, 0.8], [0.6, 0.8]], "cancel": [[1.0, 0.0], [-1.0, 0.0], [0.6, 0.8]]}
+    monkeypatch.setattr(prompt_guard, "embed_cached", lambda texts, model_name: np.array(vectors[texts[-1]]))
+    # Centroid of (1,0) and (0.6,0.8) is (0.8,0.4); its cosine with (0.6,0.8) is 0.8/|c|.
+    assert prompt_guard._centroid_similarity(["a", "b"], "on", model_name="m") == pytest.approx(0.8 / np.hypot(0.8, 0.4))
+    # Chunks that cancel out leave no topic to compare against.
+    assert prompt_guard._centroid_similarity(["a", "b"], "cancel", model_name="m") == 0.0
+
+
+def test_short_prompts_are_allowed():
+    decision = prompt_guard.evaluate("maybe commit first", "x", {"prompt_guard": {}})
+    assert decision == {"action": "allowed", "reason": "short-prompt"}
 
 
 def test_prompt_guard_main_exits_early(monkeypatch, paused):

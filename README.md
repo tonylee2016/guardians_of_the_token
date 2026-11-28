@@ -136,11 +136,16 @@ Once a session passes ~30% of the context window, GOT checks each new prompt for
 topic drift. If a prompt looks unrelated to what you've been doing, it's blocked
 *before* Claude reads it — saving a full round-trip of input tokens.
 
+"What you've been doing" is the average topic of the session: the latest recap
+and compact summary, your first prompt, your last 30 prompts of four words or
+more, and Claude's last few replies. Prompts of three words or fewer ("yes",
+"maybe commit first") are never blocked.
+
 ```text
 🛡️ Guardians blocked this prompt before Claude processed it.
 
 Reason: this looks unrelated to the current large Claude session.
-Similarity: 0.07 (block threshold 0.10)
+Similarity: 0.07 (block threshold 0.12)
 Context: 412.6k / 1.0M tokens (41%)
 Estimated cost if sent: $1.2378
 
@@ -205,7 +210,7 @@ User config lives at `~/.guardians.json`; per-project overrides go in
   "prompt_guard": {
     "enabled": true,
     "block_context_pct": 0.30,
-    "very_low_similarity": 0.10,
+    "very_low_similarity": 0.12,
     "unblock_prefix": "GOT_UNBLOCK"
   },
   "project_state": {
