@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import subprocess
 import sys
 
@@ -104,23 +105,81 @@ def test_proxy_health_and_main(proxy_client, monkeypatch):
 # ---------- cap_output ----------
 
 
-def _cap(data: bytes):
+def _run_cap(data: bytes, output_dir=None):
+    env = dict(os.environ)
+    if output_dir is not None:
+        env["GUARDIANS_OUTPUT_DIR"] = str(output_dir)
     return subprocess.run(
         [sys.executable, "-m", "guardians_of_the_token.claude.cap_output"],
         input=data,
         capture_output=True,
-        check=True,
-    ).stdout
+        env=env,
+    )
 
 
-def test_cap_output_passes_small_output_through():
-    assert _cap(b"hello\n") == b"hello\n"
+def _cap(data: bytes, output_dir=None):
+    result = _run_cap(data, output_dir)
+    assert result.returncode == 0
+    return result.stdout
 
 
-def test_cap_output_truncates_large_output():
-    out = _cap(b"y" * 50_000)
-    assert out.startswith(b"y" * 32_000)
-    assert b"output capped at 8,000 tokens (12,500 estimated total)" in out
+def test_cap_output_passes_small_output_through(tmp_path):
+    assert _cap(b"hello\n", tmp_path) == b"hello\n"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_cap_output_summarizes_large_output_and_saves_it(tmp_path):
+    data = b"y" * 50_000
+    out = _cap(data, tmp_path)
+    assert len(out) < 6_000
+    assert out.startswith(b"[Guardians of the Token: output capped at 8,000 tokens (12,500 estimated total")
+    saved = list(tmp_path.iterdir())
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == data
+    assert f"Full output: {saved[0]}".encode() in out
+
+
+def test_cap_output_puts_buried_problems_in_the_first_2kb(tmp_path):
+    lines = [f"[{i}/20000] compiled module_{i}.c ok" for i in range(20_000)]
+    lines[10_000] = "src/module_10000.c:88: warning: implicit conversion loses precision"
+    lines[15_000] = "FATAL: linker crashed"
+    lines.append("BUILD FAILED")
+    out = _cap(("\n".join(lines) + "\n").encode(), tmp_path)
+
+    first_2kb = out[:2048]
+    # Most severe first.
+    assert first_2kb.index(b"FATAL: linker crashed") < first_2kb.index(b"warning: implicit conversion")
+    assert b"L15001 FATAL: linker crashed" in first_2kb
+    assert b"BUILD FAILED" in first_2kb
+    # 20,000 near-identical lines collapse into one pattern with a count.
+    assert b"19,998x [<N>/<N>] compiled module_<N>.c ok" in out
+
+
+def test_cap_output_groups_repeated_problem_lines(tmp_path):
+    lines = [f"WARN request {i} slow" for i in range(3_000)] + ["ERROR db down"] + ["ok"] * 2_000
+    out = _cap(("\n".join(lines) + "\n").encode(), tmp_path)
+    assert out.index(b"ERROR db down") < out.index(b"(3,000x) WARN request 0 slow")
+
+
+def test_cap_output_ignores_good_news(tmp_path):
+    lines = ["step done"] * 5_000 + ["0 errors, 0 warnings", "no failures"]
+    out = _cap(("\n".join(lines) + "\n").encode(), tmp_path)
+    assert b"Problems: none matched" in out
+
+
+def test_cap_output_exits_with_the_command_exit_code(tmp_path):
+    small = _run_cap(b"oops\n\x1eGOT_EXIT=3\n", tmp_path)
+    assert (small.returncode, small.stdout) == (3, b"oops\n")
+    big = _run_cap(b"x\n" * 20_000 + b"\x1eGOT_EXIT=1\n", tmp_path)
+    assert big.returncode == 1
+    assert b"Exit code: 1" in big.stdout
+    assert b"GOT_EXIT" not in big.stdout
+
+
+def test_cap_output_keeps_the_end_of_one_huge_line(tmp_path):
+    data = b'{"items":[' + b'{"a":1},' * 5_000 + b'{"last":true}]}'
+    out = _cap(data, tmp_path)
+    assert b'{"last":true}]}' in out
 
 
 # ---------- status ----------

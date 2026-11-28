@@ -11,7 +11,7 @@
       "name": "guardians-of-the-token",
       "source": "./",
       "description": "Blocks or warns before a Read, Bash, or WebFetch would flood the context window, guards off-topic prompts in large sessions, and saves a resume snapshot before compaction.",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "category": "productivity",
       "keywords": ["context", "tokens", "guard", "hooks", "token-budget"]
     }

@@ -2,6 +2,7 @@
 
 import io
 import json
+import shlex
 import sys
 
 import pytest
@@ -105,7 +106,28 @@ def test_claude_main_bypass_and_bad_json(monkeypatch, _bypass_file):
 def test_claude_bash_command_gets_wrapped(monkeypatch):
     code, out, _ = run_main(claude_guard, monkeypatch, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
     assert code == 0
-    assert json.loads(out)["tool_input"]["command"] == f"(ls) 2>&1 | python3 -m {claude_guard.CAP_MODULE}"
+    hook_out = json.loads(out)["hookSpecificOutput"]
+    assert hook_out["hookEventName"] == "PreToolUse"
+    assert hook_out["updatedInput"]["command"] == (
+        "{ (ls\n) 2>&1; printf '\\036GOT_EXIT=%s\\n' \"$?\"; }"
+        f" | {shlex.quote(sys.executable)} -m {claude_guard.CAP_MODULE}"
+    )
+    assert "permissionDecision" not in hook_out
+    assert "tool_input" not in json.loads(out)
+
+
+@pytest.mark.parametrize(
+    "command, code",
+    [("echo hi", 0), ("exit 3", 3), ("ls /definitely/not/here", None), ("echo hi # trailing comment", 0)],
+)
+def test_claude_bash_wrapper_keeps_exit_code(command, code):
+    import subprocess
+
+    wrapped = claude_guard.wrap_command(command)
+    result = subprocess.run(["sh", "-c", wrapped], capture_output=True)
+    plain = subprocess.run(["sh", "-c", command], capture_output=True)
+    assert result.returncode == (plain.returncode if code is None else code)
+    assert b"GOT_EXIT" not in result.stdout
 
 
 def test_claude_bash_already_capped_is_left_alone(monkeypatch):
