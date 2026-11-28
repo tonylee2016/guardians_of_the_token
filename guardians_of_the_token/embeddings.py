@@ -13,6 +13,8 @@ interpreter (e.g. tests).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import urllib.request
 from pathlib import Path
 from typing import Optional, Sequence
@@ -44,13 +46,13 @@ def ensure_model() -> Path:
     return _MODELS_DIR
 
 # Per-model cosine threshold below which a prompt is considered "very unrelated"
-# to the topic anchor. Distributions differ enough between models that the
-# default has to be paired with the model. Calibrated empirically against the
-# conversation-based anchor — clearly off-topic prompts (e.g. "trip to Tokyo"
-# against a coding session) score ~0.03-0.10, while short on-topic prompts
-# ("is this good enough", "summarize") score ~0.10-0.20.
+# to the topic anchor's centroid. Distributions differ enough between models
+# that the default has to be paired with the model. The MiniLM value was
+# calibrated by replaying ~160 real prompts from 8 long sessions plus six
+# off-topic prompts at each point: 0.12 blocked 6 of 161 real prompts (the old
+# guard: 7) and 76% of off-topic ones (the old guard: 59%). The other values predate the centroid scoring.
 SIMILARITY_DEFAULTS: dict[str, float] = {
-    "all-MiniLM-L6-v2": 0.10,
+    "all-MiniLM-L6-v2": 0.12,
     "bge-small-en-v1.5": 0.25,
     "nomic-embed-text": 0.40,
     "snowflake-arctic-embed-xs": 0.20,
@@ -119,9 +121,45 @@ def embed(texts: Sequence[str], model_name: str = _DEFAULT_MODEL) -> np.ndarray:
     return pooled / np.clip(norm, 1e-9, None)
 
 
-def cosine_similarity(a: str, b: str, model_name: str = _DEFAULT_MODEL) -> float:
-    vectors = embed([a, b], model_name=model_name)
-    return float(vectors[0] @ vectors[1])
+_CACHE_MAX = 512  # embeddings kept between prompts (~1.5 KB each)
+
+
+def _cache_path(model_name: str) -> Path:
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in model_name)
+    return Path("~/.guardians").expanduser() / f"embedding-cache-{safe}.npz"
+
+
+def embed_cached(texts: Sequence[str], model_name: str = _DEFAULT_MODEL) -> np.ndarray:
+    """Like embed(), but reuses vectors for texts seen on earlier prompts.
+
+    The prompt guard re-scores the same session chunks on every prompt; only
+    the new prompt and the odd new chunk need the model. Any cache error just
+    falls back to embedding everything.
+    """
+    keys = [hashlib.sha1(t.encode("utf-8")).hexdigest() for t in texts]
+    path = _cache_path(model_name)
+    cached: dict = {}
+    try:
+        with np.load(path) as data:
+            cached = dict(zip(data["keys"].tolist(), data["vectors"]))
+    except Exception:
+        cached = {}
+    missing = sorted({k for k in keys if k not in cached})
+    if missing:
+        index = {k: i for i, k in enumerate(keys)}
+        fresh = embed([texts[index[k]] for k in missing], model_name=model_name)
+        cached.update(zip(missing, fresh))
+        # Keep this call's entries plus the most recent others, newest last.
+        order = [k for k in cached if k not in set(keys)] + list(dict.fromkeys(keys))
+        order = order[-_CACHE_MAX:]
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp.npz")
+            np.savez(tmp, keys=np.array(order), vectors=np.array([cached[k] for k in order]))
+            os.replace(tmp, path)
+        except Exception:
+            pass
+    return np.array([cached[k] for k in keys])
 
 
 def default_similarity_threshold(model_name: Optional[str]) -> float:

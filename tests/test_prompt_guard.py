@@ -29,7 +29,7 @@ def _config(**overrides):
 def _stub_embed(monkeypatch, similarity: float):
     monkeypatch.setattr(
         prompt_guard,
-        "_max_chunk_similarity",
+        "_centroid_similarity",
         lambda chunks, prompt, model_name=None: similarity,
     )
 
@@ -241,7 +241,7 @@ def test_embedding_failure_fails_open(monkeypatch):
     def boom(*_args, **_kwargs):
         raise prompt_guard.EmbeddingUnavailable("missing")
 
-    monkeypatch.setattr(prompt_guard, "_max_chunk_similarity", boom)
+    monkeypatch.setattr(prompt_guard, "_centroid_similarity", boom)
     decision = prompt_guard.evaluate(
         "totally unrelated long prompt about something else entirely",
         "x",
@@ -277,7 +277,8 @@ def test_recap_preferred_over_compact(tmp_path):
         ],
     )
     signals = read_signals(str(transcript))
-    assert signals.anchor == "RECAP"
+    # Both summaries feed the anchor; the source names the recap.
+    assert signals.anchor_chunks == ["RECAP", "COMPACT"]
     assert signals.anchor_source == "recap"
     # Matches ccstatusline: input + cache_read + cache_creation.
     assert signals.live_tokens == 128_700
@@ -321,14 +322,18 @@ def test_user_prompts_fallback_when_no_summaries(tmp_path):
         transcript,
         [
             {"type": "user", "message": {"role": "user", "content": "first session prompt"}},
-            {"type": "user", "message": {"role": "user", "content": "middle prompt"}},
-            {"type": "user", "message": {"role": "user", "content": "latest prompt"}},
+            {"type": "user", "message": {"role": "user", "content": "middle prompt about the parser"}},
+            {"type": "user", "message": {"role": "user", "content": "yes"}},
+            {"type": "user", "message": {"role": "user", "content": "latest prompt about the parser"}},
         ],
     )
     signals = read_signals(str(transcript), fallback_user_prompts=2)
     assert signals.anchor_source == "conversation"
-    assert "first session prompt" in signals.anchor
-    assert "latest prompt" in signals.anchor
+    assert signals.anchor_chunks == [
+        "first session prompt",
+        "middle prompt about the parser",
+        "latest prompt about the parser",
+    ]
 
 
 def test_assistant_text_mixed_into_anchor(tmp_path):
@@ -346,7 +351,7 @@ def test_assistant_text_mixed_into_anchor(tmp_path):
                     ]
                 },
             },
-            {"type": "user", "message": {"role": "user", "content": "follow up question"}},
+            {"type": "user", "message": {"role": "user", "content": "follow up question on that"}},
         ],
     )
     signals = read_signals(str(transcript))
@@ -492,3 +497,38 @@ def test_main_logs_blocked_event_locally(tmp_path, monkeypatch):
     assert entry["anchor_source"] == "recap"
     assert entry["estimated_tokens"] == entry["live_tokens"]
     assert entry["estimated_cost"] is not None and entry["estimated_cost"] > 0
+
+
+def test_anchor_reads_prompts_from_the_whole_session(tmp_path, monkeypatch):
+    # Early prompts sit far outside the tail window but still shape the topic.
+    import guardians_of_the_token.transcript as transcript_mod
+
+    monkeypatch.setattr(transcript_mod, "_TAIL_BYTES", 200)
+    monkeypatch.setattr(transcript_mod, "_HEAD_BYTES", 100)
+    transcript = tmp_path / "t.jsonl"
+    filler = {"type": "user", "message": {"content": [{"type": "tool_result", "content": "x" * 500}]}}
+    _write_jsonl(
+        transcript,
+        [
+            {"type": "user", "message": {"role": "user", "content": "build the homepage for the plugin"}},
+            {"type": "user", "isMeta": True, "message": {"role": "user", "content": "injected skill text here"}},
+            {"type": "user", "message": {"role": "user", "content": "move the Measured section up"}},
+            {"type": "user", "message": {"role": "user", "content": "move the Measured section up"}},
+            {"type": "user", "message": {"role": "user", "content": "[Request interrupted by user]"}},
+            {"type": "user", "message": {"role": "user", "content": ""}},
+            filler,
+            filler,
+            {"type": "assistant", "message": {"usage": {"input_tokens": 10}}},
+        ],
+    )
+    with transcript.open("a") as f:
+        f.write('{"type": "user", broken\n["user"]\n')
+    signals = read_signals(str(transcript))
+    assert signals.anchor_chunks == ["build the homepage for the plugin", "move the Measured section up"]
+    assert signals.live_tokens == 10
+
+
+def test_scan_session_handles_unreadable_file(tmp_path):
+    from guardians_of_the_token.transcript import _scan_session
+
+    assert _scan_session(str(tmp_path / "missing.jsonl")) == ("", [], "", "")

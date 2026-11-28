@@ -109,9 +109,9 @@ def test_load_returns_cached_session(monkeypatch):
 
 
 def test_default_similarity_threshold():
-    assert embeddings.default_similarity_threshold(None) == 0.10
+    assert embeddings.default_similarity_threshold(None) == 0.12
     assert embeddings.default_similarity_threshold("bge-small-en-v1.5") == 0.25
-    assert embeddings.default_similarity_threshold("unknown") == 0.10
+    assert embeddings.default_similarity_threshold("unknown") == 0.12
 
 
 def test_embeddings_main_accepts_download_flag(monkeypatch, capsys, tmp_path):
@@ -305,3 +305,36 @@ def test_test_server_main(monkeypatch, capsys, host, candidates, expected):
     monkeypatch.setattr(sys, "argv", ["guardians-test-server", "--host", host])
     test_server.main()
     assert expected in capsys.readouterr().out
+
+
+def test_embed_cached_reuses_vectors_and_fails_open(monkeypatch, tmp_path):
+    import numpy as np
+
+    calls = []
+
+    def fake_embed(texts, model_name):
+        calls.append(list(texts))
+        return np.array([[float(len(t)), 1.0] for t in texts])
+
+    monkeypatch.setattr(embeddings, "embed", fake_embed)
+    first = embeddings.embed_cached(["aa", "bbb", "aa"], model_name="m/x")
+    assert first.tolist() == [[2.0, 1.0], [3.0, 1.0], [2.0, 1.0]]
+    assert sorted(calls[0]) == ["aa", "bbb"]
+    # Second call embeds only the new text.
+    embeddings.embed_cached(["bbb", "cccc"], model_name="m/x")
+    assert calls[1] == ["cccc"]
+    # All cached: no model call at all.
+    embeddings.embed_cached(["aa", "cccc"], model_name="m/x")
+    assert len(calls) == 2
+    # Oldest entries are evicted past the cap.
+    monkeypatch.setattr(embeddings, "_CACHE_MAX", 2)
+    embeddings.embed_cached(["ddddd"], model_name="m/x")
+    with np.load(embeddings._cache_path("m/x")) as data:
+        assert len(data["keys"]) == 2
+    # A corrupt cache file is ignored.
+    embeddings._cache_path("m/x").write_bytes(b"not a cache")
+    assert embeddings.embed_cached(["aa"], model_name="m/x").tolist() == [[2.0, 1.0]]
+    # An unwritable cache dir still returns vectors.
+    monkeypatch.setattr(embeddings, "_cache_path", lambda name: tmp_path / "file" / "sub" / "c.npz")
+    (tmp_path / "file").write_text("")
+    assert embeddings.embed_cached(["eeeeee"], model_name="m/x").tolist() == [[6.0, 1.0]]
