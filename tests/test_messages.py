@@ -20,7 +20,7 @@ def test_file_context_block_uses_shared_bulleted_template():
     assert "Current context: ~10,000 tokens (2%)" in message
     assert "1. Inspect the beginning" in message
     assert "5. Bypass once for the full file" in message
-    assert "Preserve the first line exactly as written" in message
+    assert "quote the first line above exactly" in message
     assert "Next options (reply with a number):" in message
     assert "5 = run `touch /tmp/guardians_bypass`" in message
     assert "sed -n" not in message

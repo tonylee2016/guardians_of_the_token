@@ -131,7 +131,19 @@ def ask_permission(reason: str, context: str):
 
 
 def modify(tool_input: dict):
-    sys.stdout.write(json.dumps({"tool_input": tool_input}))
+    """Rewrite the tool call. Claude Code reads only hookSpecificOutput.updatedInput;
+    a top-level "tool_input" key is ignored. No permissionDecision is set, so the
+    user's normal permission rules still apply to the rewritten call."""
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "updatedInput": tool_input,
+                }
+            }
+        )
+    )
     sys.exit(0)
 
 
@@ -315,11 +327,24 @@ def guard_webfetch(tool_input: dict, transcript_path: str, config: dict, permiss
     sys.exit(2)
 
 
+def wrap_command(command: str) -> str:
+    """Pipe a command's output through cap_output and keep its exit code.
+
+    The exit code is sent as a final marker line that cap_output strips and
+    exits with, so the pipeline reports the command's status, not cap_output's.
+    The newline before ")" keeps a trailing "# comment" from swallowing it.
+    """
+    return (
+        f"{{ ({command}\n) 2>&1; printf '\\036GOT_EXIT=%s\\n' \"$?\"; }}"
+        f" | python3 -m {CAP_MODULE}"
+    )
+
+
 def guard_bash(tool_input: dict):
     command = tool_input.get("command", "")
     if CAP_MODULE in command or "cap_output.py" in command:
         return
-    wrapped = f"({command}) 2>&1 | python3 -m {CAP_MODULE}"
+    wrapped = wrap_command(command)
     new_input = dict(tool_input)
     new_input["command"] = wrapped
     modify(new_input)

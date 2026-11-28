@@ -8,7 +8,7 @@ BYPASS_FILE = "/tmp/guardians_bypass"
 FILE_OPTIONS = [
     ("Inspect the beginning", "read only the first ~200 lines (Read with a limit)"),
     ("Inspect the end", "read only the last ~200 lines (Read with an offset and limit)"),
-    ("Search for a term", "ask which term, then search the file and show matching lines only"),
+    ("Search for a term", "search the file for terms from the user's request and show matching lines only"),
     ("Summarize a bounded section", "read one bounded section and summarize it"),
     ("Bypass once for the full file", f"run `touch {BYPASS_FILE}`, then retry the original request once"),
 ]
@@ -27,6 +27,18 @@ OUTPUT_OPTIONS = [
     ("Summarize the output", "save the output to a file and summarize it"),
     ("Bypass once for the full output", f"run `touch {BYPASS_FILE}`, then rerun once"),
 ]
+
+
+# The agent keeps working instead of stopping to ask: a blocked read is a
+# reason to look smaller, not a reason to hand the task back to the user.
+CONTINUE_BOUNDED = (
+    "Do not load it in full and do not stop to ask the user which option to pick. "
+    "Continue the task yourself with a bounded approach: search it for terms from "
+    "the user's request (for example grep -n with a few likely words such as error, "
+    "fail, or names from the request), or read a slice (the first or last ~200 lines, "
+    "or Read with offset and limit), then answer from what you found. "
+    "Never use the bypass unless the user explicitly asks for the full content."
+)
 
 
 def _numbered(options: list[tuple[str, str]]) -> str:
@@ -83,11 +95,11 @@ def format_context_block(
         lines.append(f"Current context: ~{used_tokens:,} tokens ({used_pct:.0f}%)")
     lines.append(next_steps)
     relay = (
-        "[Guardians of the Token] IMPORTANT: relay the above warning and options "
-        "to the user as a plain chat message. Preserve the first line exactly as "
-        "written, including the shield emoji and title. Preserve line breaks, "
-        "target, estimate, and options. Wait for their reply before taking any action. "
-        "When they pick an option (by number or name): " + _agent_actions(options) + "."
+        "[Guardians of the Token] " + CONTINUE_BOUNDED + " "
+        "When you reply, tell the user in one line that GOT blocked the full "
+        f"{'fetch' if kind == 'url' else 'read'} (quote the first line above exactly, "
+        "including the shield emoji) and what you did instead. If the user later "
+        "picks one of the options above (by number or name): " + _agent_actions(options) + "."
     )
     lines.append(relay)
     return "\n".join(lines)
@@ -132,8 +144,8 @@ def format_permission_prompt(
     context = (
         f"{GUARD_LABEL} asked the user to approve this {verb} of {target} "
         f"(~{estimated_tokens:,} tokens). If they decline, do not retry it as is. "
-        "Offer these smaller options as a short numbered list and wait for their "
-        f"pick: {choices}."
+        + CONTINUE_BOUNDED
+        + f" Tell the user in one line what you did instead. Smaller options: {choices}."
     )
     return reason, context
 
